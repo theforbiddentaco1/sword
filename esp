@@ -1,18 +1,18 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 
 -- ==================== TELEPORT CONFIGURATION ====================
 local teleportEnabled = false
 local teleportConnection
-
 local HOVER_HEIGHT = -10
 local TELEPORT_MAX_RANGE = 750
 local CHECK_INTERVAL = 0.2
 local GYRO_TORQUE = 9e14
-
 local bodyVelocity
 local bodyGyro
 local currentTarget = nil
@@ -21,6 +21,199 @@ local currentTarget = nil
 local ESP_MAX_RANGE = 750
 local MIN_RARITY = 59
 local espObjects = {}
+
+-- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
+local LOW_HEALTH_THRESHOLD = 0.65 -- 65%
+local wasAboveThreshold = true -- Track if we were above threshold
+
+-- ==================== CHAMS CONFIGURATION ====================
+local CHAMS_RANGE = 750
+local chamsEnabled = false
+local chamObjects = {}
+
+-- ==================== SWORD DAMAGE ESP CONFIGURATION ====================
+local swordDMGEnabled = false
+local swordESPObjects = {}
+
+-- ==================== LOOTING 3 CONFIGURATION ====================
+local looting3Enabled = false
+local looting3Parts = {}
+local trackedSwords = {}
+
+-- ==================== NUMBER ABBREVIATION FUNCTION ====================
+local function abbreviateNumber(num)
+    local suffixes = {{1e18, "QN"}, {1e15, "QD"}, {1e12, "T"}, {1e9, "B"}, {1e6, "M"}, {1e3, "K"}}
+    for _, data in ipairs(suffixes) do
+        local threshold, suffix = data[1], data[2]
+        if num >= threshold then return string.format("%.2f%s", num / threshold, suffix) end
+    end
+    return tostring(math.floor(num))
+end
+
+-- ==================== SOUND NOTIFICATION FUNCTION ====================
+local function playNotificationSound()
+    task.spawn(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxasset://sounds/electronicpingshort.wav"
+        sound.Volume = 10
+        sound.Parent = SoundService
+        local startTime = tick()
+        local duration = 5
+        local interval = 0.25
+        while tick() - startTime < duration do
+            sound:Play()
+            wait(interval)
+        end
+        sound:Destroy()
+    end)
+end
+
+-- ==================== GUI CREATION ====================
+local function createGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "CombatGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+    
+    local mainButton = Instance.new("TextButton")
+    mainButton.Name = "MainButton"
+    mainButton.Size = UDim2.new(0, 65, 0, 65)
+    mainButton.Position = UDim2.new(1, -100, 1, -100)
+    mainButton.AnchorPoint = Vector2.new(0, 0)
+    mainButton.BackgroundColor3 = Color3.fromRGB(218, 182, 196)
+    mainButton.BorderSizePixel = 2
+    mainButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    mainButton.Text = "⚙️"
+    mainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    mainButton.TextSize = 32
+    mainButton.Font = Enum.Font.GothamBold
+    mainButton.Parent = screenGui
+    
+    local mainCorner = Instance.new("UICorner")
+    mainCorner.CornerRadius = UDim.new(0, 12)
+    mainCorner.Parent = mainButton
+    
+    local popupFrame = Instance.new("Frame")
+    popupFrame.Name = "PopupFrame"
+    popupFrame.Size = UDim2.new(0, 250, 0, 200)
+    popupFrame.Position = UDim2.new(1, -270, 1, -320)
+    popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    popupFrame.BorderSizePixel = 2
+    popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    popupFrame.Visible = false
+    popupFrame.Parent = screenGui
+    
+    local popupCorner = Instance.new("UICorner")
+    popupCorner.CornerRadius = UDim.new(0, 12)
+    popupCorner.Parent = popupFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "TitleLabel"
+    titleLabel.Size = UDim2.new(1, -20, 0, 30)
+    titleLabel.Position = UDim2.new(0, 10, 0, 10)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "toggles"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextSize = 18
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    titleLabel.Parent = popupFrame
+    
+    local chamsButton = Instance.new("TextButton")
+    chamsButton.Name = "ChamsButton"
+    chamsButton.Size = UDim2.new(1, -20, 0, 40)
+    chamsButton.Position = UDim2.new(0, 10, 0, 50)
+    chamsButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    chamsButton.BorderSizePixel = 0
+    chamsButton.Text = "chams: off"
+    chamsButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    chamsButton.TextSize = 16
+    chamsButton.Font = Enum.Font.GothamBold
+    chamsButton.Parent = popupFrame
+    
+    local chamsCorner = Instance.new("UICorner")
+    chamsCorner.CornerRadius = UDim.new(0, 8)
+    chamsCorner.Parent = chamsButton
+    
+    local swordDMGButton = Instance.new("TextButton")
+    swordDMGButton.Name = "SwordDMGButton"
+    swordDMGButton.Size = UDim2.new(1, -20, 0, 40)
+    swordDMGButton.Position = UDim2.new(0, 10, 0, 100)
+    swordDMGButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    swordDMGButton.BorderSizePixel = 0
+    swordDMGButton.Text = "swordDMG: off"
+    swordDMGButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    swordDMGButton.TextSize = 16
+    swordDMGButton.Font = Enum.Font.GothamBold
+    swordDMGButton.Parent = popupFrame
+    
+    local swordDMGCorner = Instance.new("UICorner")
+    swordDMGCorner.CornerRadius = UDim.new(0, 8)
+    swordDMGCorner.Parent = swordDMGButton
+    
+    local looting3Button = Instance.new("TextButton")
+    looting3Button.Name = "Looting3Button"
+    looting3Button.Size = UDim2.new(1, -20, 0, 40)
+    looting3Button.Position = UDim2.new(0, 10, 0, 150)
+    looting3Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    looting3Button.BorderSizePixel = 0
+    looting3Button.Text = "looting3: off"
+    looting3Button.TextColor3 = Color3.fromRGB(255, 70, 70)
+    looting3Button.TextSize = 16
+    looting3Button.Font = Enum.Font.GothamBold
+    looting3Button.Parent = popupFrame
+    
+    local looting3Corner = Instance.new("UICorner")
+    looting3Corner.CornerRadius = UDim.new(0, 8)
+    looting3Corner.Parent = looting3Button
+    
+    mainButton.MouseButton1Click:Connect(function()
+        popupFrame.Visible = not popupFrame.Visible
+    end)
+    
+    chamsButton.MouseButton1Click:Connect(function()
+        chamsEnabled = not chamsEnabled
+        if chamsEnabled then
+            chamsButton.Text = "chams: on"
+            chamsButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+        else
+            chamsButton.Text = "chams: off"
+            chamsButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+            for npc, highlight in pairs(chamObjects) do highlight:Destroy() end
+            chamObjects = {}
+        end
+    end)
+    
+    swordDMGButton.MouseButton1Click:Connect(function()
+        swordDMGEnabled = not swordDMGEnabled
+        if swordDMGEnabled then
+            swordDMGButton.Text = "swordDMG: on"
+            swordDMGButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+        else
+            swordDMGButton.Text = "swordDMG: off"
+            swordDMGButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+            for plr, billboard in pairs(swordESPObjects) do billboard:Destroy() end
+            swordESPObjects = {}
+        end
+    end)
+    
+    looting3Button.MouseButton1Click:Connect(function()
+        looting3Enabled = not looting3Enabled
+        if looting3Enabled then
+            looting3Button.Text = "looting3: on"
+            looting3Button.TextColor3 = Color3.fromRGB(70, 255, 70)
+        else
+            looting3Button.Text = "looting3: off"
+            looting3Button.TextColor3 = Color3.fromRGB(255, 70, 70)
+            for sword, part in pairs(looting3Parts) do part:Destroy() end
+            looting3Parts = {}
+            trackedSwords = {}
+        end
+    end)
+    
+    return screenGui
+end
 
 -- ==================== TELEPORT FUNCTIONS ====================
 local function getCharacter()
@@ -33,9 +226,7 @@ local function isPlayerHead(head)
         local humanoid = model:FindFirstChildOfClass("Humanoid")
         if humanoid then
             for _, plr in pairs(Players:GetPlayers()) do
-                if plr.Character == model then
-                    return true
-                end
+                if plr.Character == model then return true end
             end
         end
     end
@@ -43,27 +234,18 @@ local function isPlayerHead(head)
 end
 
 local function findNearestNPC(character)
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        return nil
-    end
-    
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return nil end
     local rootPart = character.HumanoidRootPart
     local nearestHead = nil
     local nearestDistance = TELEPORT_MAX_RANGE
-    
     local npcsFolder = workspace:FindFirstChild("NPCs")
-    if not npcsFolder then
-        return nil
-    end
-    
+    if not npcsFolder then return nil end
     for _, npc in pairs(npcsFolder:GetChildren()) do
         if npc:IsA("Model") then
             local head = npc:FindFirstChild("Head")
             local humanoid = npc:FindFirstChildOfClass("Humanoid")
-            
             if head and humanoid and humanoid.Health > 0 and not isPlayerHead(head) then
                 local distance = (rootPart.Position - head.Position).Magnitude
-                
                 if distance < nearestDistance then
                     nearestDistance = distance
                     nearestHead = head
@@ -71,25 +253,18 @@ local function findNearestNPC(character)
             end
         end
     end
-    
     return nearestHead
 end
 
 local function createBodyMovers(character)
-    if not character or not character:FindFirstChild("HumanoidRootPart") then
-        return
-    end
-    
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     local rootPart = character.HumanoidRootPart
-    
     if bodyVelocity then bodyVelocity:Destroy() end
     if bodyGyro then bodyGyro:Destroy() end
-    
     bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
     bodyVelocity.Velocity = Vector3.new(0, 0, 0)
     bodyVelocity.Parent = rootPart
-    
     bodyGyro = Instance.new("BodyGyro")
     bodyGyro.MaxTorque = Vector3.new(GYRO_TORQUE, GYRO_TORQUE, GYRO_TORQUE)
     bodyGyro.P = 10000
@@ -98,53 +273,33 @@ local function createBodyMovers(character)
 end
 
 local function removeBodyMovers()
-    if bodyVelocity then
-        bodyVelocity:Destroy()
-        bodyVelocity = nil
-    end
-    if bodyGyro then
-        bodyGyro:Destroy()
-        bodyGyro = nil
-    end
+    if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+    if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
 end
 
 local function teleportLoop()
     local lastCheck = 0
-    
     teleportConnection = RunService.Heartbeat:Connect(function(deltaTime)
         if not teleportEnabled then return end
-        
         local character = player.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") then
-            return
-        end
-        
+        if not character or not character:FindFirstChild("HumanoidRootPart") then return end
         local rootPart = character.HumanoidRootPart
-        
         lastCheck = lastCheck + deltaTime
         if lastCheck >= CHECK_INTERVAL then
             lastCheck = 0
             currentTarget = findNearestNPC(character)
         end
-        
         if currentTarget and currentTarget.Parent then
             local humanoid = currentTarget.Parent:FindFirstChildOfClass("Humanoid")
-            
             if humanoid and humanoid.Health > 0 then
-                if not bodyVelocity or not bodyVelocity.Parent then
-                    createBodyMovers(character)
-                end
-                
+                if not bodyVelocity or not bodyVelocity.Parent then createBodyMovers(character) end
                 local targetPosition = currentTarget.Position + Vector3.new(0, HOVER_HEIGHT, 0)
                 local lookAtCFrame = CFrame.lookAt(targetPosition, currentTarget.Position)
                 rootPart.CFrame = lookAtCFrame
-                
                 if bodyGyro and bodyGyro.Parent then
                     bodyGyro.CFrame = CFrame.lookAt(rootPart.Position, currentTarget.Position)
                 end
-            else
-                currentTarget = nil
-            end
+            else currentTarget = nil end
         else
             removeBodyMovers()
             currentTarget = nil
@@ -153,17 +308,13 @@ local function teleportLoop()
 end
 
 local function stopTeleportLoop()
-    if teleportConnection then
-        teleportConnection:Disconnect()
-        teleportConnection = nil
-    end
+    if teleportConnection then teleportConnection:Disconnect() teleportConnection = nil end
     removeBodyMovers()
     currentTarget = nil
 end
 
 local function toggleTeleport()
     teleportEnabled = not teleportEnabled
-    
     if teleportEnabled then
         print("NPC Teleport: ENABLED")
         teleportLoop()
@@ -176,22 +327,16 @@ end
 -- ==================== ESP FUNCTIONS ====================
 local function createESP(npc)
     if espObjects[npc] then return end
-    
     local head = npc:FindFirstChild("Head")
     if not head then return end
-    
     local rarityValue = npc:GetAttribute("Rarity")
     if not rarityValue or rarityValue <= MIN_RARITY then return end
-    
     local gui = head:FindFirstChild("Gui")
     if not gui then return end
-    
     local rarityLabel = gui:FindFirstChild("Rarity")
     if not rarityLabel or not rarityLabel:IsA("TextLabel") then return end
-    
     local rarityText = rarityLabel.Text
     local mobName = npc.Name
-    
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "ESP"
     billboard.Adornee = head
@@ -199,7 +344,6 @@ local function createESP(npc)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     billboard.AlwaysOnTop = true
     billboard.Parent = head
-    
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, 0, 1, 0)
     textLabel.BackgroundTransparency = 1
@@ -209,32 +353,23 @@ local function createESP(npc)
     textLabel.TextScaled = true
     textLabel.Font = Enum.Font.Jura
     textLabel.Parent = billboard
-    
     espObjects[npc] = billboard
 end
 
 local function removeESP(npc)
-    if espObjects[npc] then
-        espObjects[npc]:Destroy()
-        espObjects[npc] = nil
-    end
+    if espObjects[npc] then espObjects[npc]:Destroy() espObjects[npc] = nil end
 end
 
 local function shouldHaveESP(npc, playerChar)
     if not npc or not npc:IsA("Model") then return false end
     if not playerChar or not playerChar:FindFirstChild("HumanoidRootPart") then return false end
-    
     local head = npc:FindFirstChild("Head")
     local humanoid = npc:FindFirstChildOfClass("Humanoid")
-    
     if not head or not humanoid or humanoid.Health <= 0 then return false end
-    
     local rarityValue = npc:GetAttribute("Rarity")
     if not rarityValue or rarityValue <= MIN_RARITY then return false end
-    
     local distance = (playerChar.HumanoidRootPart.Position - head.Position).Magnitude
     if distance > ESP_MAX_RANGE then return false end
-    
     return true
 end
 
@@ -242,32 +377,270 @@ local function espLoop()
     RunService.Heartbeat:Connect(function()
         local character = player.Character
         if not character then return end
-        
         local npcsFolder = workspace:FindFirstChild("NPCs")
         if not npcsFolder then return end
-        
         local checkedNPCs = {}
-        
         for _, npc in pairs(npcsFolder:GetChildren()) do
             checkedNPCs[npc] = true
-            
-            if shouldHaveESP(npc, character) then
-                createESP(npc)
-            else
-                removeESP(npc)
-            end
+            if shouldHaveESP(npc, character) then createESP(npc) else removeESP(npc) end
         end
-        
         for npc, _ in pairs(espObjects) do
-            if not checkedNPCs[npc] or not npc.Parent then
-                removeESP(npc)
+            if not checkedNPCs[npc] or not npc.Parent then removeESP(npc) end
+        end
+    end)
+end
+
+-- ==================== CHAMS FUNCTIONS ====================
+local function createChams(npc)
+    if chamObjects[npc] then return end
+    local humanoid = npc:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ChamsHighlight"
+    highlight.Adornee = npc
+    highlight.FillColor = Color3.fromRGB(39, 169, 245)
+    highlight.OutlineColor = Color3.fromRGB(217, 157, 242)
+    highlight.FillTransparency = 0.6
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = npc
+    chamObjects[npc] = highlight
+end
+
+local function removeChams(npc)
+    if chamObjects[npc] then chamObjects[npc]:Destroy() chamObjects[npc] = nil end
+end
+
+local function updateChams()
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local rootPart = character.HumanoidRootPart
+    local npcsFolder = workspace:FindFirstChild("NPCs")
+    if not npcsFolder then return end
+    local closestNPC = nil
+    local closestDistance = math.huge
+    local checkedNPCs = {}
+    for _, npc in pairs(npcsFolder:GetChildren()) do
+        if npc:IsA("Model") then
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            local npcRoot = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+            if humanoid and humanoid.Health > 0 and npcRoot then
+                checkedNPCs[npc] = true
+                local distance = (rootPart.Position - npcRoot.Position).Magnitude
+                if distance <= CHAMS_RANGE then
+                    if chamsEnabled then
+                        createChams(npc)
+                        if distance < closestDistance then
+                            closestDistance = distance
+                            closestNPC = npc
+                        end
+                    end
+                else removeChams(npc) end
+            else removeChams(npc) end
+        end
+    end
+    for npc, highlight in pairs(chamObjects) do
+        if not checkedNPCs[npc] or not npc.Parent then removeChams(npc)
+        elseif npc == closestNPC then highlight.FillColor = Color3.fromRGB(102, 209, 90)
+        else highlight.FillColor = Color3.fromRGB(167, 29, 226) end
+    end
+    if not chamsEnabled then
+        for npc, _ in pairs(chamObjects) do removeChams(npc) end
+    end
+end
+
+local function chamsLoop()
+    RunService.Heartbeat:Connect(function() updateChams() end)
+end
+
+-- ==================== SWORD DAMAGE ESP FUNCTIONS ====================
+local function createSwordESP(targetPlayer)
+    if swordESPObjects[targetPlayer] then return end
+    local character = targetPlayer.Character
+    if not character then return end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    local damageValue = nil
+    for _, tool in pairs(character:GetChildren()) do
+        if tool:IsA("Tool") then
+            local damage = tool:FindFirstChild("Damage")
+            if damage and damage:IsA("NumberValue") then
+                damageValue = damage.Value
+                break
             end
         end
+    end
+    if not damageValue then return end
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "SwordDMGESP"
+    billboard.Adornee = rootPart
+    billboard.Size = UDim2.new(0, 120, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = rootPart
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = abbreviateNumber(damageValue) .. " DMG"
+    textLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    textLabel.TextStrokeTransparency = 0.5
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Parent = billboard
+    swordESPObjects[targetPlayer] = billboard
+end
+
+local function removeSwordESP(targetPlayer)
+    if swordESPObjects[targetPlayer] then swordESPObjects[targetPlayer]:Destroy() swordESPObjects[targetPlayer] = nil end
+end
+
+local function updateSwordESP()
+    if not swordDMGEnabled then
+        for plr, billboard in pairs(swordESPObjects) do removeSwordESP(plr) end
+        return
+    end
+    local checkedPlayers = {}
+    for _, targetPlayer in pairs(Players:GetPlayers()) do
+        if targetPlayer ~= player then
+            checkedPlayers[targetPlayer] = true
+            local character = targetPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local hasDamageTool = false
+                local damageValue = nil
+                for _, tool in pairs(character:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local damage = tool:FindFirstChild("Damage")
+                        if damage and damage:IsA("NumberValue") then
+                            hasDamageTool = true
+                            damageValue = damage.Value
+                            break
+                        end
+                    end
+                end
+                if hasDamageTool and damageValue then
+                    if swordESPObjects[targetPlayer] and swordESPObjects[targetPlayer].Parent then
+                        local textLabel = swordESPObjects[targetPlayer]:FindFirstChildOfClass("TextLabel")
+                        if textLabel then textLabel.Text = abbreviateNumber(damageValue) .. " DMG" end
+                    else createSwordESP(targetPlayer) end
+                else removeSwordESP(targetPlayer) end
+            else removeSwordESP(targetPlayer) end
+        end
+    end
+    for plr, _ in pairs(swordESPObjects) do
+        if not checkedPlayers[plr] or not plr.Parent then removeSwordESP(plr) end
+    end
+end
+
+local function swordESPLoop()
+    RunService.Heartbeat:Connect(function() updateSwordESP() end)
+end
+
+Players.PlayerAdded:Connect(function(targetPlayer)
+    targetPlayer.CharacterAdded:Connect(function()
+        if swordESPObjects[targetPlayer] then removeSwordESP(targetPlayer) end
+    end)
+end)
+
+-- ==================== LOOTING3 FUNCTIONS ====================
+local function hasLooting3Enchants(sword)
+    local enchant1 = sword:GetAttribute("Enchant1")
+    local enchant2 = sword:GetAttribute("Enchant2")
+    local enchant3 = sword:GetAttribute("Enchant3")
+    return enchant1 == 8 and enchant2 == 8 and enchant3 == 8
+end
+
+local function createLooting3Part(sword)
+    if looting3Parts[sword] then return end
+    local mainPart = sword:FindFirstChild("Main")
+    if not mainPart then return end
+    local cylinder = Instance.new("Part")
+    cylinder.Name = "Looting3Marker_" .. sword.Name
+    cylinder.Shape = Enum.PartType.Cylinder
+    cylinder.Size = Vector3.new(2048, 1.5, 1.5)
+    cylinder.Material = Enum.Material.Neon
+    cylinder.Color = Color3.fromRGB(117, 0, 0)
+    cylinder.Transparency = 0.4
+    cylinder.CanCollide = false
+    cylinder.CanQuery = false
+    cylinder.CanTouch = false
+    cylinder.Anchored = true
+    cylinder.Rotation = Vector3.new(0, 0, 90)
+    cylinder.Parent = workspace
+    looting3Parts[sword] = cylinder
+    if not trackedSwords[sword] then
+        trackedSwords[sword] = true
+        playNotificationSound()
+        print("Looting3 Sword Found: " .. sword.Name)
+    end
+    sword.AncestryChanged:Connect(function()
+        if not sword:IsDescendantOf(workspace) then
+            if looting3Parts[sword] then looting3Parts[sword]:Destroy() looting3Parts[sword] = nil end
+            trackedSwords[sword] = nil
+        end
+    end)
+end
+
+local function removeLooting3Part(sword)
+    if looting3Parts[sword] then looting3Parts[sword]:Destroy() looting3Parts[sword] = nil end
+end
+
+local function updateLooting3Parts()
+    if not looting3Enabled then
+        for sword, part in pairs(looting3Parts) do part:Destroy() end
+        looting3Parts = {}
+        trackedSwords = {}
+        return
+    end
+    local swordsFolder = workspace:FindFirstChild("Swords")
+    if not swordsFolder then return end
+    local checkedSwords = {}
+    for _, sword in pairs(swordsFolder:GetChildren()) do
+        if sword:IsA("Model") then
+            checkedSwords[sword] = true
+            if hasLooting3Enchants(sword) then
+                local mainPart = sword:FindFirstChild("Main")
+                if mainPart then
+                    if not looting3Parts[sword] then createLooting3Part(sword) end
+                    if looting3Parts[sword] then
+                        looting3Parts[sword].CFrame = mainPart.CFrame * CFrame.Angles(0, 0, math.rad(90))
+                    end
+                end
+            else removeLooting3Part(sword) end
+        end
+    end
+    for sword, part in pairs(looting3Parts) do
+        if not checkedSwords[sword] or not sword.Parent then
+            removeLooting3Part(sword)
+            trackedSwords[sword] = nil
+        end
+    end
+end
+
+local function looting3Loop()
+    RunService.Heartbeat:Connect(function() updateLooting3Parts() end)
+end
+
+-- ==================== LOW HEALTH AUTO TELEPORT ====================
+local function setupHealthMonitor(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    wasAboveThreshold = true
+    humanoid.HealthChanged:Connect(function(health)
+        local healthPercent = health / humanoid.MaxHealth
+        if healthPercent <= LOW_HEALTH_THRESHOLD and wasAboveThreshold then
+            wasAboveThreshold = false
+            local success, err = pcall(function()
+                local args = {"Teleport Area", 3}
+                ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
+            end)
+            if success then print("Low Health Teleport: Activated at " .. math.floor(healthPercent * 100) .. "% health")
+            else warn("Low Health Teleport: Failed - " .. tostring(err)) end
+        elseif healthPercent > LOW_HEALTH_THRESHOLD then wasAboveThreshold = true end
     end)
 end
 
 -- ==================== CHARACTER RESPAWN HANDLER ====================
 player.CharacterAdded:Connect(function(character)
+    setupHealthMonitor(character)
     if teleportEnabled then
         character:WaitForChild("HumanoidRootPart")
         wait(0.1)
@@ -279,21 +652,20 @@ end)
 -- ==================== KEYBINDS ====================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    
-    if input.KeyCode == Enum.KeyCode.F then
-        toggleTeleport()
-    end
+    if input.KeyCode == Enum.KeyCode.F then toggleTeleport() end
 end)
 
 -- ==================== INITIALIZATION ====================
--- Start ESP (always on)
+createGUI()
 espLoop()
 print("High Rarity ESP: ENABLED (Always On)")
-
--- Load existing character for teleport if already spawned
-if player.Character then
-    -- Just wait for it to be ready
-end
-
+chamsLoop()
+print("Chams System: Ready")
+swordESPLoop()
+print("Sword Damage ESP System: Ready")
+looting3Loop()
+print("Looting3 System: Ready")
+if player.Character then setupHealthMonitor(player.Character) end
 print("NPC Teleport Script Loaded! Press F to toggle.")
+print("Low Health Auto-Teleport: ENABLED (triggers at 65% health, repeatable)")
 loadstring(game:HttpGetAsync('https://pastebin.com/raw/WgkcDYUs'))()
