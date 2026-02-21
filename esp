@@ -34,11 +34,11 @@ local chamsEnabled = false
 local chamObjects = {}
 
 -- ==================== SWORD DAMAGE ESP CONFIGURATION ====================
-local swordDMGEnabled = false
+local swordDMGEnabled = true
 local swordESPObjects = {}
 
 -- ==================== LOOTING 3 CONFIGURATION ====================
-local looting3Enabled = false
+local looting3Enabled = true
 local looting3Parts = {}
 local trackedSwords = {}
 
