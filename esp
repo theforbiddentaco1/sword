@@ -37,9 +37,9 @@ local chamObjects = {}
 local swordDMGEnabled = true
 local swordESPObjects = {}
 
--- ==================== LOOTING 3 CONFIGURATION ====================
-local looting3Enabled = true
-local looting3Parts = {}
+-- ==================== FORTUNE + ANCIENT CONFIGURATION ====================
+local fortuneAncientEnabled = true
+local fortuneAncientParts = {}
 local trackedSwords = {}
 
 -- ==================== NUMBER ABBREVIATION FUNCTION ====================
@@ -171,21 +171,21 @@ local function createGUI()
     swordDMGCorner.CornerRadius = UDim.new(0, 8)
     swordDMGCorner.Parent = swordDMGButton
     
-    local looting3Button = Instance.new("TextButton")
-    looting3Button.Name = "Looting3Button"
-    looting3Button.Size = UDim2.new(1, -20, 0, 40)
-    looting3Button.Position = UDim2.new(0, 10, 0, 150)
-    looting3Button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    looting3Button.BorderSizePixel = 0
-    looting3Button.Text = "looting3: off"
-    looting3Button.TextColor3 = Color3.fromRGB(255, 70, 70)
-    looting3Button.TextSize = 16
-    looting3Button.Font = Enum.Font.GothamBold
-    looting3Button.Parent = popupFrame
+    local fortuneAncientButton = Instance.new("TextButton")
+    fortuneAncientButton.Name = "FortuneAncientButton"
+    fortuneAncientButton.Size = UDim2.new(1, -20, 0, 40)
+    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 150)
+    fortuneAncientButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    fortuneAncientButton.BorderSizePixel = 0
+    fortuneAncientButton.Text = "fortune+ancient: off"
+    fortuneAncientButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    fortuneAncientButton.TextSize = 16
+    fortuneAncientButton.Font = Enum.Font.GothamBold
+    fortuneAncientButton.Parent = popupFrame
     
-    local looting3Corner = Instance.new("UICorner")
-    looting3Corner.CornerRadius = UDim.new(0, 8)
-    looting3Corner.Parent = looting3Button
+    local fortuneAncientCorner = Instance.new("UICorner")
+    fortuneAncientCorner.CornerRadius = UDim.new(0, 8)
+    fortuneAncientCorner.Parent = fortuneAncientButton
     
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
@@ -217,16 +217,16 @@ local function createGUI()
         end
     end)
     
-    looting3Button.MouseButton1Click:Connect(function()
-        looting3Enabled = not looting3Enabled
-        if looting3Enabled then
-            looting3Button.Text = "looting3: on"
-            looting3Button.TextColor3 = Color3.fromRGB(70, 255, 70)
+    fortuneAncientButton.MouseButton1Click:Connect(function()
+        fortuneAncientEnabled = not fortuneAncientEnabled
+        if fortuneAncientEnabled then
+            fortuneAncientButton.Text = "fortune+ancient: on"
+            fortuneAncientButton.TextColor3 = Color3.fromRGB(70, 255, 70)
         else
-            looting3Button.Text = "looting3: off"
-            looting3Button.TextColor3 = Color3.fromRGB(255, 70, 70)
-            for sword, part in pairs(looting3Parts) do part:Destroy() end
-            looting3Parts = {}
+            fortuneAncientButton.Text = "fortune+ancient: off"
+            fortuneAncientButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+            for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
+            fortuneAncientParts = {}
             trackedSwords = {}
         end
     end)
@@ -560,20 +560,27 @@ Players.PlayerAdded:Connect(function(targetPlayer)
     end)
 end)
 
--- ==================== LOOTING3 FUNCTIONS ====================
-local function hasLooting3Enchants(sword)
+-- ==================== FORTUNE + ANCIENT FUNCTIONS ====================
+local function hasFortuneAndAncient(sword)
     local enchant1 = sword:GetAttribute("Enchant1")
     local enchant2 = sword:GetAttribute("Enchant2")
     local enchant3 = sword:GetAttribute("Enchant3")
-    return enchant1 == 8 and enchant2 == 8 and enchant3 == 8
+    local enchants = {enchant1, enchant2, enchant3}
+    local hasFortune = false
+    local hasAncient = false
+    for _, enchant in ipairs(enchants) do
+        if enchant == 0 then hasFortune = true end
+        if enchant == 11 then hasAncient = true end
+    end
+    return hasFortune and hasAncient
 end
 
-local function createLooting3Part(sword)
-    if looting3Parts[sword] then return end
+local function createFortuneAncientPart(sword)
+    if fortuneAncientParts[sword] then return end
     local mainPart = sword:FindFirstChild("Main")
     if not mainPart then return end
     local cylinder = Instance.new("Part")
-    cylinder.Name = "Looting3Marker_" .. sword.Name
+    cylinder.Name = "FortuneAncientMarker_" .. sword.Name
     cylinder.Shape = Enum.PartType.Cylinder
     cylinder.Size = Vector3.new(2048, 1.5, 1.5)
     cylinder.Material = Enum.Material.Neon
@@ -585,28 +592,28 @@ local function createLooting3Part(sword)
     cylinder.Anchored = true
     cylinder.Rotation = Vector3.new(0, 0, 90)
     cylinder.Parent = workspace
-    looting3Parts[sword] = cylinder
+    fortuneAncientParts[sword] = cylinder
     if not trackedSwords[sword] then
         trackedSwords[sword] = true
         playNotificationSound()
-        print("Looting3 Sword Found: " .. sword.Name)
+        print("Fortune + Ancient Sword Found: " .. sword.Name)
     end
     sword.AncestryChanged:Connect(function()
         if not sword:IsDescendantOf(workspace) then
-            if looting3Parts[sword] then looting3Parts[sword]:Destroy() looting3Parts[sword] = nil end
+            if fortuneAncientParts[sword] then fortuneAncientParts[sword]:Destroy() fortuneAncientParts[sword] = nil end
             trackedSwords[sword] = nil
         end
     end)
 end
 
-local function removeLooting3Part(sword)
-    if looting3Parts[sword] then looting3Parts[sword]:Destroy() looting3Parts[sword] = nil end
+local function removeFortuneAncientPart(sword)
+    if fortuneAncientParts[sword] then fortuneAncientParts[sword]:Destroy() fortuneAncientParts[sword] = nil end
 end
 
-local function updateLooting3Parts()
-    if not looting3Enabled then
-        for sword, part in pairs(looting3Parts) do part:Destroy() end
-        looting3Parts = {}
+local function updateFortuneAncientParts()
+    if not fortuneAncientEnabled then
+        for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
+        fortuneAncientParts = {}
         trackedSwords = {}
         return
     end
@@ -616,27 +623,27 @@ local function updateLooting3Parts()
     for _, sword in pairs(swordsFolder:GetChildren()) do
         if sword:IsA("Model") then
             checkedSwords[sword] = true
-            if hasLooting3Enchants(sword) then
+            if hasFortuneAndAncient(sword) then
                 local mainPart = sword:FindFirstChild("Main")
                 if mainPart then
-                    if not looting3Parts[sword] then createLooting3Part(sword) end
-                    if looting3Parts[sword] then
-                        looting3Parts[sword].CFrame = mainPart.CFrame * CFrame.Angles(0, 0, math.rad(90))
+                    if not fortuneAncientParts[sword] then createFortuneAncientPart(sword) end
+                    if fortuneAncientParts[sword] then
+                        fortuneAncientParts[sword].CFrame = mainPart.CFrame * CFrame.Angles(0, 0, math.rad(90))
                     end
                 end
-            else removeLooting3Part(sword) end
+            else removeFortuneAncientPart(sword) end
         end
     end
-    for sword, part in pairs(looting3Parts) do
+    for sword, part in pairs(fortuneAncientParts) do
         if not checkedSwords[sword] or not sword.Parent then
-            removeLooting3Part(sword)
+            removeFortuneAncientPart(sword)
             trackedSwords[sword] = nil
         end
     end
 end
 
-local function looting3Loop()
-    RunService.Heartbeat:Connect(function() updateLooting3Parts() end)
+local function fortuneAncientLoop()
+    RunService.Heartbeat:Connect(function() updateFortuneAncientParts() end)
 end
 
 -- ==================== LOW HEALTH AUTO TELEPORT ====================
@@ -686,8 +693,8 @@ chamsLoop()
 print("Chams System: Ready")
 swordESPLoop()
 print("Sword Damage ESP System: Ready")
-looting3Loop()
-print("Looting3 System: Ready")
+fortuneAncientLoop()
+print("Fortune + Ancient System: Ready")
 if player.Character then setupHealthMonitor(player.Character) end
 print("NPC Teleport Script Loaded! Press F to toggle.")
 print("Low Health Auto-Teleport: ENABLED (65% with players nearby, 30% when alone)")
