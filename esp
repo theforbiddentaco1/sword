@@ -23,8 +23,8 @@ local MIN_RARITY = 59
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
-local LOW_HEALTH_THRESHOLD_WITH_PLAYERS = 0.65 -- 65% when players nearby
-local LOW_HEALTH_THRESHOLD_NO_PLAYERS = 0.30 -- 30% when no players nearby
+local LOW_HEALTH_THRESHOLD_WITH_PLAYERS = 0.5 -- 65% when players nearby
+local LOW_HEALTH_THRESHOLD_NO_PLAYERS = 0.25 -- 30% when no players nearby
 local PLAYER_DETECTION_RANGE = 750
 local wasAboveThreshold = true -- Track if we were above threshold
 
@@ -566,13 +566,14 @@ local function hasFortuneAndAncient(sword)
     local enchant2 = sword:GetAttribute("Enchant2")
     local enchant3 = sword:GetAttribute("Enchant3")
     local enchants = {enchant1, enchant2, enchant3}
-    local hasFortune = false
-    local hasAncient = false
+    local fortuneCount = 0
+    local ancientCount = 0
     for _, enchant in ipairs(enchants) do
-        if enchant == 0 then hasFortune = true end
-        if enchant == 11 then hasAncient = true end
+        if enchant == 0 then fortuneCount = fortuneCount + 1 end
+        if enchant == 11 then ancientCount = ancientCount + 1 end
     end
-    return hasFortune and hasAncient
+    -- At least 2 ancient OR (1 ancient and 2 fortune)
+    return ancientCount >= 2 or (ancientCount >= 1 and fortuneCount >= 2)
 end
 
 local function createFortuneAncientPart(sword)
