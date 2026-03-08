@@ -19,7 +19,7 @@ local currentTarget = nil
 
 -- ==================== ESP CONFIGURATION ====================
 local ESP_MAX_RANGE = 750
-local MIN_RARITY = 59
+local MIN_RARITY = 63
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
