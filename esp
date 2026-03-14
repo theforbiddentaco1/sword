@@ -40,7 +40,7 @@ local trackedSwords = {}
 
 -- ==================== AUTO EQUIP CONFIGURATION ====================
 local autoEquipEnabled = false
-local CYCLE_DELAY = 0.33
+local CYCLE_DELAY = 0.5
 local CHARACTER_REFRESH = 0.2
 local autoEquipCharacter
 local autoEquipHumanoid
