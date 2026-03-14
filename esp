@@ -4,6 +4,7 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local StarterGui = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
 
@@ -44,6 +45,10 @@ local CYCLE_DELAY = 0.5
 local CHARACTER_REFRESH = 0.2
 local autoEquipCharacter
 local autoEquipHumanoid
+
+-- ==================== SPAWN TRACKER CONFIGURATION ====================
+local SPAWN_INTERVAL = 3.0
+local spawnValues = ReplicatedStorage:WaitForChild("Values"):WaitForChild("Spawns")
 
 -- ==================== NUMBER ABBREVIATION FUNCTION ====================
 local function abbreviateNumber(num)
@@ -90,6 +95,60 @@ local function isPlayerNearby()
     return false
 end
 
+-- ==================== SPAWN TRACKER FUNCTIONS ====================
+local function formatTime(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local secs = math.floor(seconds % 60)
+    return string.format("%02d:%02d:%02d", hours, minutes, secs)
+end
+
+local function calculateNextEvents()
+    local luck10 = spawnValues.Luck10.Value
+    local luck50 = spawnValues.Luck50.Value
+    local luck250 = spawnValues.Luck250.Value
+    local luck5 = spawnValues.Luck5.Value
+    
+    local events = {}
+    
+    -- Calculate when each spawn hits 0
+    for i = 0, 250 do
+        local spawnsUntil = i
+        local luck10Hit = (luck10 - spawnsUntil) % 5 == 0 and (luck10 - spawnsUntil) <= 0
+        local luck50Hit = (luck50 - spawnsUntil) % 15 == 0 and (luck50 - spawnsUntil) <= 0
+        local luck250Hit = (luck250 - spawnsUntil) % 50 == 0 and (luck250 - spawnsUntil) <= 0
+        local luck5Hit = (luck5 - spawnsUntil) % 125 == 0 and (luck5 - spawnsUntil) <= 0
+        
+        local eventType = nil
+        local count = 0
+        if luck10Hit then count = count + 1 end
+        if luck50Hit then count = count + 1 end
+        if luck250Hit then count = count + 1 end
+        if luck5Hit then count = count + 1 end
+        
+        if count == 4 then
+            eventType = "QUAD"
+        elseif count == 3 then
+            if luck10Hit and luck50Hit and luck250Hit then
+                eventType = "TRIPLE"
+            elseif luck5Hit and luck50Hit and luck250Hit then
+                eventType = "TRIPLE2"
+            end
+        end
+        
+        if eventType and spawnsUntil > 0 then
+            table.insert(events, {
+                spawns = spawnsUntil,
+                type = eventType,
+                time = spawnsUntil * SPAWN_INTERVAL
+            })
+            if #events >= 5 then break end
+        end
+    end
+    
+    return events
+end
+
 -- ==================== GUI CREATION ====================
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
@@ -116,6 +175,25 @@ local function createGUI()
     mainCorner.CornerRadius = UDim.new(0, 12)
     mainCorner.Parent = mainButton
     
+    -- Spawn Tracker Button
+    local spawnButton = Instance.new("TextButton")
+    spawnButton.Name = "SpawnButton"
+    spawnButton.Size = UDim2.new(0, 65, 0, 65)
+    spawnButton.Position = UDim2.new(1, -100, 1, -180)
+    spawnButton.AnchorPoint = Vector2.new(0, 0)
+    spawnButton.BackgroundColor3 = Color3.fromRGB(134, 222, 183)
+    spawnButton.BorderSizePixel = 2
+    spawnButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    spawnButton.Text = "📊"
+    spawnButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    spawnButton.TextSize = 32
+    spawnButton.Font = Enum.Font.GothamBold
+    spawnButton.Parent = screenGui
+    
+    local spawnCorner = Instance.new("UICorner")
+    spawnCorner.CornerRadius = UDim.new(0, 12)
+    spawnCorner.Parent = spawnButton
+    
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
     popupFrame.Size = UDim2.new(0, 250, 0, 250)
@@ -141,6 +219,76 @@ local function createGUI()
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
+    
+    -- Spawn Tracker Frame
+    local spawnFrame = Instance.new("Frame")
+    spawnFrame.Name = "SpawnFrame"
+    spawnFrame.Size = UDim2.new(0, 300, 0, 350)
+    spawnFrame.Position = UDim2.new(1, -320, 1, -450)
+    spawnFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    spawnFrame.BorderSizePixel = 2
+    spawnFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    spawnFrame.Visible = false
+    spawnFrame.Parent = screenGui
+    
+    local spawnFrameCorner = Instance.new("UICorner")
+    spawnFrameCorner.CornerRadius = UDim.new(0, 12)
+    spawnFrameCorner.Parent = spawnFrame
+    
+    local spawnTitle = Instance.new("TextLabel")
+    spawnTitle.Name = "SpawnTitle"
+    spawnTitle.Size = UDim2.new(1, -20, 0, 30)
+    spawnTitle.Position = UDim2.new(0, 10, 0, 10)
+    spawnTitle.BackgroundTransparency = 1
+    spawnTitle.Text = "spawn tracker"
+    spawnTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    spawnTitle.TextSize = 18
+    spawnTitle.Font = Enum.Font.GothamBold
+    spawnTitle.TextXAlignment = Enum.TextXAlignment.Center
+    spawnTitle.Parent = spawnFrame
+    
+    local spawnList = Instance.new("ScrollingFrame")
+    spawnList.Name = "SpawnList"
+    spawnList.Size = UDim2.new(1, -20, 1, -50)
+    spawnList.Position = UDim2.new(0, 10, 0, 40)
+    spawnList.BackgroundTransparency = 1
+    spawnList.BorderSizePixel = 0
+    spawnList.ScrollBarThickness = 6
+    spawnList.Parent = spawnFrame
+    
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 5)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = spawnList
+    
+    local function updateSpawnTracker()
+        for _, child in pairs(spawnList:GetChildren()) do
+            if child:IsA("TextLabel") then child:Destroy() end
+        end
+        
+        local events = calculateNextEvents()
+        
+        for i, event in ipairs(events) do
+            local label = Instance.new("TextLabel")
+            label.Size = UDim2.new(1, 0, 0, 30)
+            label.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            label.BorderSizePixel = 0
+            label.Text = string.format("%d - %s | %s", event.spawns, event.type, formatTime(event.time))
+            label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            label.TextSize = 14
+            label.Font = Enum.Font.GothamBold
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.TextXAlignment = Enum.TextXAlignment.Center
+            label.LayoutOrder = i
+            label.Parent = spawnList
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 6)
+            corner.Parent = label
+        end
+        
+        spawnList.CanvasSize = UDim2.new(0, 0, 0, #events * 35)
+    end
     
     local teleportButton = Instance.new("TextButton")
     teleportButton.Name = "TeleportButton"
@@ -208,6 +356,19 @@ local function createGUI()
     
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
+    end)
+    
+    spawnButton.MouseButton1Click:Connect(function()
+        spawnFrame.Visible = not spawnFrame.Visible
+        if spawnFrame.Visible then updateSpawnTracker() end
+    end)
+    
+    -- Update spawn tracker every second when visible
+    task.spawn(function()
+        while true do
+            if spawnFrame.Visible then updateSpawnTracker() end
+            task.wait(1)
+        end
     end)
     
     teleportButton.MouseButton1Click:Connect(function()
@@ -714,6 +875,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ==================== INITIALIZATION ====================
+StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+
 createGUI()
 espLoop()
 print("High Rarity ESP: ENABLED (Always On)")
