@@ -40,7 +40,7 @@ local trackedSwords = {}
 
 -- ==================== AUTO EQUIP CONFIGURATION ====================
 local autoEquipEnabled = false
-local CYCLE_DELAY = 0.5
+local CYCLE_DELAY = 0.33
 local CHARACTER_REFRESH = 0.2
 local autoEquipCharacter
 local autoEquipHumanoid
@@ -714,8 +714,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ==================== INITIALIZATION ====================
-StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
-
 createGUI()
 espLoop()
 print("High Rarity ESP: ENABLED (Always On)")
