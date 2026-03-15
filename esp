@@ -45,6 +45,13 @@ local CHARACTER_REFRESH = 0.2
 local autoEquipCharacter
 local autoEquipHumanoid
 
+-- ==================== ONE SHOT THREAT DETECTION ====================
+local threatDetectionEnabled = true
+local hasEscapedThreat = {}
+local THREAT_DETECTION_RANGE = 65
+local CRIT_MULTIPLIER = 5
+local HITS_TO_KILL = 5
+
 -- ==================== NUMBER ABBREVIATION FUNCTION ====================
 local function abbreviateNumber(num)
     local suffixes = {{1e18, "QN"}, {1e15, "QD"}, {1e12, "T"}, {1e9, "B"}, {1e6, "M"}, {1e3, "K"}}
@@ -90,6 +97,21 @@ local function isPlayerNearby()
     return false
 end
 
+-- ==================== GET CURRENT HEALTH (always fresh) ====================
+local function getMyHealth()
+    local success, result = pcall(function()
+        return workspace:WaitForChild("bittersweetdxsires", 1):WaitForChild("Health", 1).Value
+    end)
+    if success then return result end
+    -- fallback to humanoid
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then return humanoid.Health end
+    end
+    return 100
+end
+
 -- ==================== GUI CREATION ====================
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
@@ -97,7 +119,7 @@ local function createGUI()
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.Parent = player:WaitForChild("PlayerGui")
-    
+
     local mainButton = Instance.new("TextButton")
     mainButton.Name = "MainButton"
     mainButton.Size = UDim2.new(0, 65, 0, 65)
@@ -111,25 +133,25 @@ local function createGUI()
     mainButton.TextSize = 32
     mainButton.Font = Enum.Font.GothamBold
     mainButton.Parent = screenGui
-    
+
     local mainCorner = Instance.new("UICorner")
     mainCorner.CornerRadius = UDim.new(0, 12)
     mainCorner.Parent = mainButton
-    
+
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 250)
-    popupFrame.Position = UDim2.new(1, -270, 1, -370)
+    popupFrame.Size = UDim2.new(0, 250, 0, 300)
+    popupFrame.Position = UDim2.new(1, -270, 1, -420)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
     popupFrame.Visible = false
     popupFrame.Parent = screenGui
-    
+
     local popupCorner = Instance.new("UICorner")
     popupCorner.CornerRadius = UDim.new(0, 12)
     popupCorner.Parent = popupFrame
-    
+
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "TitleLabel"
     titleLabel.Size = UDim2.new(1, -20, 0, 30)
@@ -141,7 +163,7 @@ local function createGUI()
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
-    
+
     local teleportButton = Instance.new("TextButton")
     teleportButton.Name = "TeleportButton"
     teleportButton.Size = UDim2.new(1, -20, 0, 40)
@@ -153,11 +175,11 @@ local function createGUI()
     teleportButton.TextSize = 16
     teleportButton.Font = Enum.Font.GothamBold
     teleportButton.Parent = popupFrame
-    
+
     local teleportCorner = Instance.new("UICorner")
     teleportCorner.CornerRadius = UDim.new(0, 8)
     teleportCorner.Parent = teleportButton
-    
+
     local swordDMGButton = Instance.new("TextButton")
     swordDMGButton.Name = "SwordDMGButton"
     swordDMGButton.Size = UDim2.new(1, -20, 0, 40)
@@ -169,11 +191,11 @@ local function createGUI()
     swordDMGButton.TextSize = 16
     swordDMGButton.Font = Enum.Font.GothamBold
     swordDMGButton.Parent = popupFrame
-    
+
     local swordDMGCorner = Instance.new("UICorner")
     swordDMGCorner.CornerRadius = UDim.new(0, 8)
     swordDMGCorner.Parent = swordDMGButton
-    
+
     local fortuneAncientButton = Instance.new("TextButton")
     fortuneAncientButton.Name = "FortuneAncientButton"
     fortuneAncientButton.Size = UDim2.new(1, -20, 0, 40)
@@ -185,11 +207,11 @@ local function createGUI()
     fortuneAncientButton.TextSize = 16
     fortuneAncientButton.Font = Enum.Font.GothamBold
     fortuneAncientButton.Parent = popupFrame
-    
+
     local fortuneAncientCorner = Instance.new("UICorner")
     fortuneAncientCorner.CornerRadius = UDim.new(0, 8)
     fortuneAncientCorner.Parent = fortuneAncientButton
-    
+
     local autoEquipButton = Instance.new("TextButton")
     autoEquipButton.Name = "AutoEquipButton"
     autoEquipButton.Size = UDim2.new(1, -20, 0, 40)
@@ -201,15 +223,33 @@ local function createGUI()
     autoEquipButton.TextSize = 16
     autoEquipButton.Font = Enum.Font.GothamBold
     autoEquipButton.Parent = popupFrame
-    
+
     local autoEquipCorner = Instance.new("UICorner")
     autoEquipCorner.CornerRadius = UDim.new(0, 8)
     autoEquipCorner.Parent = autoEquipButton
-    
+
+    -- NEW: Threat Detection toggle button
+    local threatButton = Instance.new("TextButton")
+    threatButton.Name = "ThreatButton"
+    threatButton.Size = UDim2.new(1, -20, 0, 40)
+    threatButton.Position = UDim2.new(0, 10, 0, 250)
+    threatButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    threatButton.BorderSizePixel = 0
+    threatButton.Text = "threatEscape: on"
+    threatButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+    threatButton.TextSize = 16
+    threatButton.Font = Enum.Font.GothamBold
+    threatButton.Parent = popupFrame
+
+    local threatCorner = Instance.new("UICorner")
+    threatCorner.CornerRadius = UDim.new(0, 8)
+    threatCorner.Parent = threatButton
+
+    -- ==================== BUTTON CALLBACKS ====================
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
     end)
-    
+
     teleportButton.MouseButton1Click:Connect(function()
         teleportEnabled = not teleportEnabled
         if teleportEnabled then
@@ -224,7 +264,7 @@ local function createGUI()
             stopTeleportLoop()
         end
     end)
-    
+
     swordDMGButton.MouseButton1Click:Connect(function()
         swordDMGEnabled = not swordDMGEnabled
         if swordDMGEnabled then
@@ -237,7 +277,7 @@ local function createGUI()
             swordESPObjects = {}
         end
     end)
-    
+
     fortuneAncientButton.MouseButton1Click:Connect(function()
         fortuneAncientEnabled = not fortuneAncientEnabled
         if fortuneAncientEnabled then
@@ -251,7 +291,7 @@ local function createGUI()
             trackedSwords = {}
         end
     end)
-    
+
     autoEquipButton.MouseButton1Click:Connect(function()
         autoEquipEnabled = not autoEquipEnabled
         if autoEquipEnabled then
@@ -262,7 +302,21 @@ local function createGUI()
             autoEquipButton.TextColor3 = Color3.fromRGB(255, 70, 70)
         end
     end)
-    
+
+    threatButton.MouseButton1Click:Connect(function()
+        threatDetectionEnabled = not threatDetectionEnabled
+        if threatDetectionEnabled then
+            threatButton.Text = "threatEscape: on"
+            threatButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+            print("Threat Escape: ENABLED")
+        else
+            threatButton.Text = "threatEscape: off"
+            threatButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+            hasEscapedThreat = {}
+            print("Threat Escape: DISABLED")
+        end
+    end)
+
     return screenGui
 end
 
@@ -674,14 +728,11 @@ local function setupHealthMonitor(character)
         local threshold = playerNearby and LOW_HEALTH_THRESHOLD_WITH_PLAYERS or LOW_HEALTH_THRESHOLD_NO_PLAYERS
         if healthPercent <= threshold and wasAboveThreshold then
             wasAboveThreshold = false
-
             local lowHealthChar = player.Character
             if lowHealthChar and lowHealthChar:FindFirstChild("HumanoidRootPart") then
                 local rootPart = lowHealthChar.HumanoidRootPart
                 rootPart.CFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
             end
-
-            -- Step 2: Fire the safe zone remote
             local success, err = pcall(function()
                 local args = {"Teleport Area", 3}
                 ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
@@ -695,15 +746,11 @@ local function setupHealthMonitor(character)
 end
 
 -- ==================== ONE SHOT THREAT DETECTION ====================
-local hasEscapedThreat = {}
-local THREAT_DETECTION_RANGE = 65
-local CRIT_MULTIPLIER = 5
-local HITS_TO_KILL = 5
-
 local function getThreatPlayers(character)
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or not character:FindFirstChild("HumanoidRootPart") then return {} end
-    local myHealth = humanoid.Health
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return {} end
+
+    -- Always read fresh health from workspace path, fallback to humanoid
+    local myHealth = getMyHealth()
     local myRoot = character.HumanoidRootPart
     local threats = {}
 
@@ -715,14 +762,12 @@ local function getThreatPlayers(character)
         local dist = (myRoot.Position - theirChar.HumanoidRootPart.Position).Magnitude
         if dist > THREAT_DETECTION_RANGE then continue end
 
-        -- Check their equipped sword damage
         for _, tool in pairs(theirChar:GetChildren()) do
             if tool:IsA("Tool") then
                 local dmgVal = tool:FindFirstChild("Damage")
                 if dmgVal and dmgVal:IsA("NumberValue") then
                     local critDamage = dmgVal.Value * CRIT_MULTIPLIER
                     local hitsToKill = math.ceil(myHealth / dmgVal.Value)
-                    -- Threat if: crit one-shots OR they can kill in 5 hits or fewer
                     if critDamage >= myHealth or hitsToKill <= HITS_TO_KILL then
                         table.insert(threats, targetPlayer)
                         break
@@ -739,8 +784,7 @@ local function escapeThreat()
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     local rootPart = character.HumanoidRootPart
 
-    local escapeCFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
-    rootPart.CFrame = escapeCFrame
+    rootPart.CFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
 
     local success, err = pcall(function()
         local args = {"Teleport Area", 3}
@@ -755,23 +799,25 @@ end
 
 local function threatDetectionLoop()
     RunService.Heartbeat:Connect(function()
+        if not threatDetectionEnabled then
+            hasEscapedThreat = {}
+            return
+        end
+
         local character = player.Character
         if not character then return end
 
         local threats = getThreatPlayers(character)
 
         if #threats > 0 then
-            -- Build a key from all current threat players to avoid repeat triggers
             local key = ""
             for _, t in ipairs(threats) do key = key .. t.UserId end
-
             if not hasEscapedThreat[key] then
                 hasEscapedThreat[key] = true
                 print("One-Shot Threat Detected! Escaping...")
                 escapeThreat()
             end
         else
-            -- Reset when no threats nearby so it can trigger again next time
             hasEscapedThreat = {}
         end
     end)
