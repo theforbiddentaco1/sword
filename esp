@@ -674,6 +674,14 @@ local function setupHealthMonitor(character)
         local threshold = playerNearby and LOW_HEALTH_THRESHOLD_WITH_PLAYERS or LOW_HEALTH_THRESHOLD_NO_PLAYERS
         if healthPercent <= threshold and wasAboveThreshold then
             wasAboveThreshold = false
+
+            local lowHealthChar = player.Character
+            if lowHealthChar and lowHealthChar:FindFirstChild("HumanoidRootPart") then
+                local rootPart = lowHealthChar.HumanoidRootPart
+                rootPart.CFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
+            end
+
+            -- Step 2: Fire the safe zone remote
             local success, err = pcall(function()
                 local args = {"Teleport Area", 3}
                 ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
