@@ -686,6 +686,93 @@ local function setupHealthMonitor(character)
     end)
 end
 
+-- ==================== ONE SHOT THREAT DETECTION ====================
+local hasEscapedThreat = {}
+local THREAT_DETECTION_RANGE = 65
+local CRIT_MULTIPLIER = 5
+local HITS_TO_KILL = 5
+
+local function getThreatPlayers(character)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or not character:FindFirstChild("HumanoidRootPart") then return {} end
+    local myHealth = humanoid.Health
+    local myRoot = character.HumanoidRootPart
+    local threats = {}
+
+    for _, targetPlayer in pairs(Players:GetPlayers()) do
+        if targetPlayer == player then continue end
+        local theirChar = targetPlayer.Character
+        if not theirChar or not theirChar:FindFirstChild("HumanoidRootPart") then continue end
+
+        local dist = (myRoot.Position - theirChar.HumanoidRootPart.Position).Magnitude
+        if dist > THREAT_DETECTION_RANGE then continue end
+
+        -- Check their equipped sword damage
+        for _, tool in pairs(theirChar:GetChildren()) do
+            if tool:IsA("Tool") then
+                local dmgVal = tool:FindFirstChild("Damage")
+                if dmgVal and dmgVal:IsA("NumberValue") then
+                    local critDamage = dmgVal.Value * CRIT_MULTIPLIER
+                    local hitsToKill = math.ceil(myHealth / dmgVal.Value)
+                    -- Threat if: crit one-shots OR they can kill in 5 hits or fewer
+                    if critDamage >= myHealth or hitsToKill <= HITS_TO_KILL then
+                        table.insert(threats, targetPlayer)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    return threats
+end
+
+local function escapeThreat()
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    local rootPart = character.HumanoidRootPart
+
+    -- Step 1: Fling 1000 studs up ONCE
+    local escapeCFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
+    rootPart.CFrame = escapeCFrame
+
+    task.wait(0.1)
+
+    -- Step 2: Fire the safe zone remote
+    local success, err = pcall(function()
+        local args = {"Teleport Area", 3}
+        ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
+    end)
+    if success then
+        print("One-Shot Threat Escape: Teleported to safe zone!")
+    else
+        warn("One-Shot Threat Escape: Remote failed - " .. tostring(err))
+    end
+end
+
+local function threatDetectionLoop()
+    RunService.Heartbeat:Connect(function()
+        local character = player.Character
+        if not character then return end
+
+        local threats = getThreatPlayers(character)
+
+        if #threats > 0 then
+            -- Build a key from all current threat players to avoid repeat triggers
+            local key = ""
+            for _, t in ipairs(threats) do key = key .. t.UserId end
+
+            if not hasEscapedThreat[key] then
+                hasEscapedThreat[key] = true
+                print("One-Shot Threat Detected! Escaping...")
+                escapeThreat()
+            end
+        else
+            -- Reset when no threats nearby so it can trigger again next time
+            hasEscapedThreat = {}
+        end
+    end)
+end
+
 -- ==================== CHARACTER RESPAWN HANDLER ====================
 player.CharacterAdded:Connect(function(character)
     setupHealthMonitor(character)
