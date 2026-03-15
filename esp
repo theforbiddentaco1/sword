@@ -69,7 +69,7 @@ local function playNotificationSound()
     task.spawn(function()
         local sound = Instance.new("Sound")
         sound.SoundId = "rbxasset://sounds/electronicpingshort.wav"
-        sound.Volume = 10
+        sound.Volume = 6
         sound.Parent = SoundService
         local startTime = tick()
         local duration = 5
@@ -99,19 +99,34 @@ local function isPlayerNearby()
     return false
 end
 
--- ==================== GET CURRENT HEALTH (always fresh) ====================
+-- ==================== GET CURRENT HEALTH ====================
 local function getMyHealth()
-    local success, result = pcall(function()
-        return workspace:WaitForChild("bittersweetdxsires", 1):WaitForChild("Health", 1).Value
-    end)
-    if success then return result end
-    -- fallback to humanoid
     local character = player.Character
-    if character then
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then return humanoid.Health end
-    end
-    return 100
+    if not character then return nil end
+    local charName = character.Name
+    local hpFolder = workspace:FindFirstChild(charName)
+    if not hpFolder then return nil end
+    local hp = hpFolder:FindFirstChild("HP")
+    if not hp then return nil end
+    local health = hp:FindFirstChild("Health")
+    if not health then return nil end
+    return health.Value
+end
+
+-- ==================== TRIPLE SPAWN CALCULATOR ====================
+local Luck10 = ReplicatedStorage.Values.Spawns.Luck10
+local Luck50 = ReplicatedStorage.Values.Spawns.Luck50
+local Luck250 = ReplicatedStorage.Values.Spawns.Luck250
+
+local function findTriple()
+	for i = 0,1000000 do
+		if (Luck10.Value - i) % 6 == 0
+		and (Luck50.Value - i) % 16 == 0
+		and (Luck250.Value - i) % 51 == 0 then
+			return i
+		end
+	end
+	return "?"
 end
 
 -- ==================== GUI CREATION ====================
@@ -135,6 +150,24 @@ local function createGUI()
     mainButton.TextSize = 32
     mainButton.Font = Enum.Font.GothamBold
     mainButton.Parent = screenGui
+
+    -- ==================== TRIPLE DISPLAY BOX ====================
+    local tripleBox = Instance.new("TextLabel")
+    tripleBox.Name = "TripleDisplay"
+    tripleBox.Size = UDim2.new(0, 90, 0, 45)
+    tripleBox.Position = UDim2.new(1, -200, 1, -95)
+    tripleBox.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    tripleBox.BorderSizePixel = 2
+    tripleBox.BorderColor3 = Color3.fromRGB(255,255,255)
+    tripleBox.Text = "..."
+    tripleBox.TextColor3 = Color3.fromRGB(255,255,255)
+    tripleBox.TextScaled = true
+    tripleBox.Font = Enum.Font.GothamBold
+    tripleBox.Parent = screenGui
+
+    local tripleCorner = Instance.new("UICorner")
+    tripleCorner.CornerRadius = UDim.new(0,10)
+    tripleCorner.Parent = tripleBox
 
     local mainCorner = Instance.new("UICorner")
     mainCorner.CornerRadius = UDim.new(0, 12)
@@ -230,7 +263,6 @@ local function createGUI()
     autoEquipCorner.CornerRadius = UDim.new(0, 8)
     autoEquipCorner.Parent = autoEquipButton
 
-    -- NEW: Threat Detection toggle button
     local threatButton = Instance.new("TextButton")
     threatButton.Name = "ThreatButton"
     threatButton.Size = UDim2.new(1, -20, 0, 40)
@@ -247,7 +279,6 @@ local function createGUI()
     threatCorner.CornerRadius = UDim.new(0, 8)
     threatCorner.Parent = threatButton
 
-    -- ==================== BUTTON CALLBACKS ====================
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
     end)
@@ -318,7 +349,12 @@ local function createGUI()
             print("Threat Escape: DISABLED")
         end
     end)
-
+    
+    task.spawn(function()
+	while true do
+		local triple = findTriple()
+		tripleBox.Text = tostring(triple) .. " - triple"
+		task.wait(3) end end)
     return screenGui
 end
 
@@ -751,8 +787,9 @@ end
 local function getThreatPlayers(character)
     if not character or not character:FindFirstChild("HumanoidRootPart") then return {} end
 
-    -- Always read fresh health from workspace path, fallback to humanoid
     local myHealth = getMyHealth()
+    if not myHealth then return {} end
+
     local myRoot = character.HumanoidRootPart
     local threats = {}
 
@@ -785,9 +822,7 @@ local function escapeThreat()
     local character = player.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     local rootPart = character.HumanoidRootPart
-
     rootPart.CFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
-
     local success, err = pcall(function()
         local args = {"Teleport Area", 3}
         ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
@@ -805,12 +840,9 @@ local function threatDetectionLoop()
             hasEscapedThreat = {}
             return
         end
-
         local character = player.Character
         if not character then return end
-
         local threats = getThreatPlayers(character)
-
         if #threats > 0 then
             local key = ""
             for _, t in ipairs(threats) do key = key .. t.UserId end
