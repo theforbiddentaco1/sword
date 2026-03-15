@@ -812,3 +812,5 @@ if player.Character then setupHealthMonitor(player.Character) end
 print("NPC Teleport Script Loaded! Press F to toggle.")
 print("Auto Equip: Press J to toggle")
 print("Low Health Auto-Teleport: ENABLED (50% with players nearby, 25% when alone)")
+threatDetectionLoop()
+print("One-Shot Threat Detection: ENABLED (65 stud range, crit-aware)")
