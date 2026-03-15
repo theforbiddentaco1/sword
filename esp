@@ -739,13 +739,9 @@ local function escapeThreat()
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
     local rootPart = character.HumanoidRootPart
 
-    -- Step 1: Fling 1000 studs up ONCE
     local escapeCFrame = CFrame.new(rootPart.Position + Vector3.new(0, 1000, 0))
     rootPart.CFrame = escapeCFrame
 
-    task.wait(0.1)
-
-    -- Step 2: Fire the safe zone remote
     local success, err = pcall(function()
         local args = {"Teleport Area", 3}
         ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
