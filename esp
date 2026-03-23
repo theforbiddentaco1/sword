@@ -13,7 +13,7 @@ local player = Players.LocalPlayer
 local teleportEnabled = false
 local teleportHighestRarity = true  -- true = highest rarity in range, false = nearest
 local teleportConnection
-local HOVER_HEIGHT = -10
+local HOVER_HEIGHT = -9
 local TELEPORT_MAX_RANGE = 750
 local CHECK_INTERVAL = 0.2
 local GYRO_TORQUE = 9e14
@@ -174,10 +174,11 @@ local function createGUI()
     mainCorner.CornerRadius = UDim.new(0, 12)
     mainCorner.Parent = mainButton
 
+    -- Popup is now smaller since teleport and autoequip buttons are removed
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 350)
-    popupFrame.Position = UDim2.new(1, -270, 1, -470)
+    popupFrame.Size = UDim2.new(0, 250, 0, 220)
+    popupFrame.Position = UDim2.new(1, -270, 1, -340)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -200,44 +201,10 @@ local function createGUI()
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
 
-    -- TELEPORT ON/OFF BUTTON
-    local teleportButton = Instance.new("TextButton")
-    teleportButton.Name = "TeleportButton"
-    teleportButton.Size = UDim2.new(1, -20, 0, 40)
-    teleportButton.Position = UDim2.new(0, 10, 0, 50)
-    teleportButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    teleportButton.BorderSizePixel = 0
-    teleportButton.Text = "teleport: on"
-    teleportButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-    teleportButton.TextSize = 16
-    teleportButton.Font = Enum.Font.GothamBold
-    teleportButton.Parent = popupFrame
-
-    local teleportCorner = Instance.new("UICorner")
-    teleportCorner.CornerRadius = UDim.new(0, 8)
-    teleportCorner.Parent = teleportButton
-
-    -- TELEPORT MODE BUTTON (highest rarity vs nearest)
-    local teleportModeButton = Instance.new("TextButton")
-    teleportModeButton.Name = "TeleportModeButton"
-    teleportModeButton.Size = UDim2.new(1, -20, 0, 40)
-    teleportModeButton.Position = UDim2.new(0, 10, 0, 100)
-    teleportModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    teleportModeButton.BorderSizePixel = 0
-    teleportModeButton.Text = "mode: highest rarity"
-    teleportModeButton.TextColor3 = Color3.fromRGB(70, 200, 255)
-    teleportModeButton.TextSize = 16
-    teleportModeButton.Font = Enum.Font.GothamBold
-    teleportModeButton.Parent = popupFrame
-
-    local teleportModeCorner = Instance.new("UICorner")
-    teleportModeCorner.CornerRadius = UDim.new(0, 8)
-    teleportModeCorner.Parent = teleportModeButton
-
     local swordDMGButton = Instance.new("TextButton")
     swordDMGButton.Name = "SwordDMGButton"
     swordDMGButton.Size = UDim2.new(1, -20, 0, 40)
-    swordDMGButton.Position = UDim2.new(0, 10, 0, 150)
+    swordDMGButton.Position = UDim2.new(0, 10, 0, 50)
     swordDMGButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     swordDMGButton.BorderSizePixel = 0
     swordDMGButton.Text = "swordDMG: on"
@@ -253,7 +220,7 @@ local function createGUI()
     local fortuneAncientButton = Instance.new("TextButton")
     fortuneAncientButton.Name = "FortuneAncientButton"
     fortuneAncientButton.Size = UDim2.new(1, -20, 0, 40)
-    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 200)
+    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 100)
     fortuneAncientButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     fortuneAncientButton.BorderSizePixel = 0
     fortuneAncientButton.Text = "fortune+ancient: on"
@@ -266,26 +233,10 @@ local function createGUI()
     fortuneAncientCorner.CornerRadius = UDim.new(0, 8)
     fortuneAncientCorner.Parent = fortuneAncientButton
 
-    local autoEquipButton = Instance.new("TextButton")
-    autoEquipButton.Name = "AutoEquipButton"
-    autoEquipButton.Size = UDim2.new(1, -20, 0, 40)
-    autoEquipButton.Position = UDim2.new(0, 10, 0, 250)
-    autoEquipButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    autoEquipButton.BorderSizePixel = 0
-    autoEquipButton.Text = "autoEquip: off"
-    autoEquipButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-    autoEquipButton.TextSize = 16
-    autoEquipButton.Font = Enum.Font.GothamBold
-    autoEquipButton.Parent = popupFrame
-
-    local autoEquipCorner = Instance.new("UICorner")
-    autoEquipCorner.CornerRadius = UDim.new(0, 8)
-    autoEquipCorner.Parent = autoEquipButton
-
     local threatButton = Instance.new("TextButton")
     threatButton.Name = "ThreatButton"
     threatButton.Size = UDim2.new(1, -20, 0, 40)
-    threatButton.Position = UDim2.new(0, 10, 0, 300)
+    threatButton.Position = UDim2.new(0, 10, 0, 150)
     threatButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     threatButton.BorderSizePixel = 0
     threatButton.Text = "threatEscape: on"
@@ -300,34 +251,6 @@ local function createGUI()
 
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
-    end)
-
-    teleportButton.MouseButton1Click:Connect(function()
-        teleportEnabled = not teleportEnabled
-        if teleportEnabled then
-            teleportButton.Text = "teleport: on"
-            teleportButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-            print("NPC Teleport: ENABLED")
-            teleportLoop()
-        else
-            teleportButton.Text = "teleport: off"
-            teleportButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-            print("NPC Teleport: DISABLED")
-            stopTeleportLoop()
-        end
-    end)
-
-    teleportModeButton.MouseButton1Click:Connect(function()
-        teleportHighestRarity = not teleportHighestRarity
-        if teleportHighestRarity then
-            teleportModeButton.Text = "mode: highest rarity"
-            teleportModeButton.TextColor3 = Color3.fromRGB(70, 200, 255)
-            print("Teleport Mode: HIGHEST RARITY")
-        else
-            teleportModeButton.Text = "mode: nearest"
-            teleportModeButton.TextColor3 = Color3.fromRGB(255, 200, 70)
-            print("Teleport Mode: NEAREST")
-        end
     end)
 
     swordDMGButton.MouseButton1Click:Connect(function()
@@ -354,17 +277,6 @@ local function createGUI()
             for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
             fortuneAncientParts = {}
             trackedSwords = {}
-        end
-    end)
-
-    autoEquipButton.MouseButton1Click:Connect(function()
-        autoEquipEnabled = not autoEquipEnabled
-        if autoEquipEnabled then
-            autoEquipButton.Text = "autoEquip: on"
-            autoEquipButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-        else
-            autoEquipButton.Text = "autoEquip: off"
-            autoEquipButton.TextColor3 = Color3.fromRGB(255, 70, 70)
         end
     end)
 
@@ -417,7 +329,6 @@ local function findTargetNPC(character)
     local bestHead = nil
 
     if teleportHighestRarity then
-        -- Find highest rarity NPC within range (mirrors ESP rarity check)
         local highestRarity = -math.huge
         for _, npc in pairs(npcsFolder:GetChildren()) do
             if npc:IsA("Model") then
@@ -436,7 +347,6 @@ local function findTargetNPC(character)
             end
         end
     else
-        -- Original nearest NPC logic
         local nearestDistance = TELEPORT_MAX_RANGE
         for _, npc in pairs(npcsFolder:GetChildren()) do
             if npc:IsA("Model") then
@@ -667,19 +577,30 @@ Players.PlayerAdded:Connect(function(targetPlayer)
     end)
 end)
 
--- ==================== FORTUNE + ANCIENT FUNCTIONS ====================
+-- ==================== FORTUNE + ANCIENT + INSIGHT FUNCTIONS ====================
+-- Enchant IDs: 0 = Fortune, 11 = Ancient, 13 = Insight
+
 local function hasFortuneAndAncient(sword)
     local enchant1 = sword:GetAttribute("Enchant1")
     local enchant2 = sword:GetAttribute("Enchant2")
     local enchant3 = sword:GetAttribute("Enchant3")
     local enchants = {enchant1, enchant2, enchant3}
+
     local fortuneCount = 0
     local ancientCount = 0
+    local insightCount = 0
+
     for _, enchant in ipairs(enchants) do
-        if enchant == 0 then fortuneCount = fortuneCount + 1 end
+        if enchant == 0  then fortuneCount = fortuneCount + 1 end
         if enchant == 11 then ancientCount = ancientCount + 1 end
+        if enchant == 13 then insightCount = insightCount + 1 end
     end
-    return ancientCount >= 2 or (ancientCount >= 1 and fortuneCount >= 2)
+
+    -- Original: 2x ancient, OR 1x ancient + 2x fortune
+    -- New:      ancient + fortune + insight (one of each)
+    return ancientCount >= 2
+        or (ancientCount >= 1 and fortuneCount >= 2)
+        or (ancientCount >= 1 and fortuneCount >= 1 and insightCount >= 1)
 end
 
 local function createFortuneAncientPart(sword)
@@ -703,7 +624,7 @@ local function createFortuneAncientPart(sword)
     if not trackedSwords[sword] then
         trackedSwords[sword] = true
         playNotificationSound()
-        print("Fortune + Ancient Sword Found: " .. sword.Name)
+        print("Fortune + Ancient (+ Insight) Sword Found: " .. sword.Name)
     end
     sword.AncestryChanged:Connect(function()
         if not sword:IsDescendantOf(workspace) then
@@ -948,7 +869,7 @@ print("High Rarity ESP: ENABLED (Always On)")
 swordESPLoop()
 print("Sword Damage ESP System: Ready")
 fortuneAncientLoop()
-print("Fortune + Ancient System: Ready")
+print("Fortune + Ancient + Insight System: Ready")
 if player.Character then setupHealthMonitor(player.Character) end
 teleportLoop()
 print("NPC Teleport Script Loaded! Teleport ON by default (Highest Rarity mode). Press F to toggle.")
