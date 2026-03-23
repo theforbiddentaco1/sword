@@ -13,7 +13,7 @@ local player = Players.LocalPlayer
 local teleportEnabled = false
 local teleportHighestRarity = true  -- true = highest rarity in range, false = nearest
 local teleportConnection
-local HOVER_HEIGHT = -9
+local HOVER_HEIGHT = -10
 local TELEPORT_MAX_RANGE = 750
 local CHECK_INTERVAL = 0.2
 local GYRO_TORQUE = 9e14
@@ -174,11 +174,11 @@ local function createGUI()
     mainCorner.CornerRadius = UDim.new(0, 12)
     mainCorner.Parent = mainButton
 
-    -- Popup is now smaller since teleport and autoequip buttons are removed
+    -- Popup sized for 4 buttons (mode, swordDMG, fortune+ancient, threatEscape)
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 220)
-    popupFrame.Position = UDim2.new(1, -270, 1, -340)
+    popupFrame.Size = UDim2.new(0, 250, 0, 270)
+    popupFrame.Position = UDim2.new(1, -270, 1, -390)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -201,10 +201,27 @@ local function createGUI()
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
 
+    -- TELEPORT MODE BUTTON (highest rarity vs nearest)
+    local teleportModeButton = Instance.new("TextButton")
+    teleportModeButton.Name = "TeleportModeButton"
+    teleportModeButton.Size = UDim2.new(1, -20, 0, 40)
+    teleportModeButton.Position = UDim2.new(0, 10, 0, 50)
+    teleportModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    teleportModeButton.BorderSizePixel = 0
+    teleportModeButton.Text = "mode: highest rarity"
+    teleportModeButton.TextColor3 = Color3.fromRGB(70, 200, 255)
+    teleportModeButton.TextSize = 16
+    teleportModeButton.Font = Enum.Font.GothamBold
+    teleportModeButton.Parent = popupFrame
+
+    local teleportModeCorner = Instance.new("UICorner")
+    teleportModeCorner.CornerRadius = UDim.new(0, 8)
+    teleportModeCorner.Parent = teleportModeButton
+
     local swordDMGButton = Instance.new("TextButton")
     swordDMGButton.Name = "SwordDMGButton"
     swordDMGButton.Size = UDim2.new(1, -20, 0, 40)
-    swordDMGButton.Position = UDim2.new(0, 10, 0, 50)
+    swordDMGButton.Position = UDim2.new(0, 10, 0, 100)
     swordDMGButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     swordDMGButton.BorderSizePixel = 0
     swordDMGButton.Text = "swordDMG: on"
@@ -220,7 +237,7 @@ local function createGUI()
     local fortuneAncientButton = Instance.new("TextButton")
     fortuneAncientButton.Name = "FortuneAncientButton"
     fortuneAncientButton.Size = UDim2.new(1, -20, 0, 40)
-    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 100)
+    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 150)
     fortuneAncientButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     fortuneAncientButton.BorderSizePixel = 0
     fortuneAncientButton.Text = "fortune+ancient: on"
@@ -236,7 +253,7 @@ local function createGUI()
     local threatButton = Instance.new("TextButton")
     threatButton.Name = "ThreatButton"
     threatButton.Size = UDim2.new(1, -20, 0, 40)
-    threatButton.Position = UDim2.new(0, 10, 0, 150)
+    threatButton.Position = UDim2.new(0, 10, 0, 200)
     threatButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     threatButton.BorderSizePixel = 0
     threatButton.Text = "threatEscape: on"
@@ -251,6 +268,19 @@ local function createGUI()
 
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
+    end)
+
+    teleportModeButton.MouseButton1Click:Connect(function()
+        teleportHighestRarity = not teleportHighestRarity
+        if teleportHighestRarity then
+            teleportModeButton.Text = "mode: highest rarity"
+            teleportModeButton.TextColor3 = Color3.fromRGB(70, 200, 255)
+            print("Teleport Mode: HIGHEST RARITY")
+        else
+            teleportModeButton.Text = "mode: nearest"
+            teleportModeButton.TextColor3 = Color3.fromRGB(255, 200, 70)
+            print("Teleport Mode: NEAREST")
+        end
     end)
 
     swordDMGButton.MouseButton1Click:Connect(function()
