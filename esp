@@ -13,7 +13,7 @@ local player = Players.LocalPlayer
 local teleportEnabled = false
 local teleportHighestRarity = true  -- true = highest rarity in range, false = nearest
 local teleportConnection
-local HOVER_HEIGHT = -10
+local HOVER_HEIGHT = -9
 local TELEPORT_MAX_RANGE = 750
 local CHECK_INTERVAL = 0.2
 local GYRO_TORQUE = 9e14
@@ -23,7 +23,7 @@ local currentTarget = nil
 
 -- ==================== ESP CONFIGURATION ====================
 local ESP_MAX_RANGE = 750
-local MIN_RARITY = 63
+local MIN_RARITY = 70
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
