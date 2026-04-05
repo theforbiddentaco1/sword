@@ -368,7 +368,7 @@ local function findTargetNPC(character)
                     local distance = (rootPart.Position - head.Position).Magnitude
                     if distance <= TELEPORT_MAX_RANGE then
                         local rarityValue = npc:GetAttribute("Rarity")
-                        if rarityValue and rarityValue > MIN_RARITY and rarityValue > highestRarity then
+                        if rarityValue and rarityValue > 60 and rarityValue > highestRarity then
                             highestRarity = rarityValue
                             bestHead = head
                         end
