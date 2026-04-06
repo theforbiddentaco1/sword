@@ -1,21 +1,3 @@
--- Safe loop every 5 seconds
-while true do
-    local found = false
-    for _, touchInterest in pairs(workspace:GetDescendants()) do
-        if touchInterest:IsA("TouchTransmitter") and touchInterest.Parent then
-            if touchInterest.Parent.Name == "Sky" then
-                touchInterest:Destroy()
-                found = true
-            end
-        end
-    end
-    -- Just waits if none were found, no errors will occur
-    wait(5)
-end
-
-
-
-
 local StarterGui = game:GetService("StarterGui")
 StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
 local Players = game:GetService("Players")
