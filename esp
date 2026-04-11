@@ -115,15 +115,15 @@ local function getMyHealth()
 end
 
 -- ==================== TRIPLE SPAWN CALCULATOR ====================
-local Luck10 = ReplicatedStorage.Values.Spawns.Luck10
-local Luck50 = ReplicatedStorage.Values.Spawns.Luck50
-local Luck250 = ReplicatedStorage.Values.Spawns.Luck250
+local Luck25 = ReplicatedStorage.Values.Spawns.Luck25
+local Luck100 = ReplicatedStorage.Values.Spawns.Luck100
+local Luck500 = ReplicatedStorage.Values.Spawns.Luck500
 
 local function findTriple()
 	for i = 0,1000000 do
-		if (Luck10.Value - i) % 6 == 0
-		and (Luck50.Value - i) % 16 == 0
-		and (Luck250.Value - i) % 51 == 0 then
+		if (Luck25.Value - i) % 6 == 0
+		and (Luck100.Value - i) % 16 == 0
+		and (Luck500.Value - i) % 51 == 0 then
 			return i
 		end
 	end
