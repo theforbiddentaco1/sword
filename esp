@@ -721,7 +721,9 @@ Players.PlayerAdded:Connect(function(targetPlayer)
 end)
 
 -- ==================== FORTUNE + ANCIENT + INSIGHT FUNCTIONS ====================
-local function hasFortuneAndAncient(sword)
+-- Enchant IDs: 0 = Fortune, 11 = Ancient, 13 = Insight
+
+local function classifyEnchants(sword)
     local enchant1 = sword:GetAttribute("Enchant1")
     local enchant2 = sword:GetAttribute("Enchant2")
     local enchant3 = sword:GetAttribute("Enchant3")
@@ -737,21 +739,46 @@ local function hasFortuneAndAncient(sword)
         if enchant == 13 then insightCount = insightCount + 1 end
     end
 
-    return ancientCount >= 2
-        or (ancientCount >= 1 and fortuneCount >= 2)
-        or (ancientCount >= 1 and fortuneCount >= 1 and insightCount >= 1)
+    -- ANCIENT ANCIENT FORTUNE (2x ancient, 1x fortune) → dark red (existing)
+    if ancientCount >= 2 and fortuneCount >= 1 then
+        return "AAF"
+    end
+    -- ANCIENT FORTUNE FORTUNE (1x ancient, 2x fortune) → gold
+    if ancientCount >= 1 and fortuneCount >= 2 then
+        return "AFF"
+    end
+    -- ANCIENT FORTUNE INSIGHT (1x each) → purple
+    if ancientCount >= 1 and fortuneCount >= 1 and insightCount >= 1 then
+        return "AFI"
+    end
+    -- ANCIENT ANCIENT (no fortune, no insight) → dark red fallback
+    if ancientCount >= 2 then
+        return "AAF"
+    end
+
+    return nil -- no qualifying combo
 end
+
+local ENCHANT_COLORS = {
+    AAF = Color3.fromRGB(117, 0, 0),      -- ancient ancient fortune → dark red
+    AFF = Color3.fromRGB(248, 217, 109),  -- ancient fortune fortune → gold
+    AFI = Color3.fromRGB(129, 125, 255),  -- ancient fortune insight → purple
+}
 
 local function createFortuneAncientPart(sword)
     if fortuneAncientParts[sword] then return end
     local mainPart = sword:FindFirstChild("Main")
     if not mainPart then return end
+
+    local combo = classifyEnchants(sword)
+    if not combo then return end
+
     local cylinder = Instance.new("Part")
     cylinder.Name = "FortuneAncientMarker_" .. sword.Name
     cylinder.Shape = Enum.PartType.Cylinder
     cylinder.Size = Vector3.new(2048, 1.5, 1.5)
     cylinder.Material = Enum.Material.Neon
-    cylinder.Color = Color3.fromRGB(117, 0, 0)
+    cylinder.Color = ENCHANT_COLORS[combo]
     cylinder.Transparency = 0.4
     cylinder.CanCollide = false
     cylinder.CanQuery = false
@@ -760,11 +787,13 @@ local function createFortuneAncientPart(sword)
     cylinder.Rotation = Vector3.new(0, 0, 90)
     cylinder.Parent = workspace
     fortuneAncientParts[sword] = cylinder
+
     if not trackedSwords[sword] then
         trackedSwords[sword] = true
         playNotificationSound()
-        print("Fortune + Ancient (+ Insight) Sword Found: " .. sword.Name)
+        print("Enchant Combo [" .. combo .. "] Sword Found: " .. sword.Name)
     end
+
     sword.AncestryChanged:Connect(function()
         if not sword:IsDescendantOf(workspace) then
             if fortuneAncientParts[sword] then fortuneAncientParts[sword]:Destroy() fortuneAncientParts[sword] = nil end
@@ -790,7 +819,8 @@ local function updateFortuneAncientParts()
     for _, sword in pairs(swordsFolder:GetChildren()) do
         if sword:IsA("Model") then
             checkedSwords[sword] = true
-            if hasFortuneAndAncient(sword) then
+            local combo = classifyEnchants(sword)
+            if combo then
                 local mainPart = sword:FindFirstChild("Main")
                 if mainPart then
                     if not fortuneAncientParts[sword] then createFortuneAncientPart(sword) end
