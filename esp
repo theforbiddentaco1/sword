@@ -11,10 +11,11 @@ local player = Players.LocalPlayer
 
 -- ==================== TELEPORT CONFIGURATION ====================
 local teleportEnabled = false
-local teleportHighestRarity = true  -- true = highest rarity in range, false = nearest
+local teleportHighestRarity = true
 local teleportConnection
 local HOVER_HEIGHT = -9
 local TELEPORT_MAX_RANGE = 750
+local TELEPORT_MIN_RARITY = 60  -- used by teleport filter
 local CHECK_INTERVAL = 0.2
 local GYRO_TORQUE = 9e14
 local bodyVelocity
@@ -22,6 +23,7 @@ local bodyGyro
 local currentTarget = nil
 
 -- ==================== ESP CONFIGURATION ====================
+local espEnabled = true
 local ESP_MAX_RANGE = 750
 local MIN_RARITY = 70
 local espObjects = {}
@@ -174,11 +176,12 @@ local function createGUI()
     mainCorner.CornerRadius = UDim.new(0, 12)
     mainCorner.Parent = mainButton
 
-    -- Popup sized for 4 buttons (mode, swordDMG, fortune+ancient, threatEscape)
+    -- ==================== POPUP FRAME ====================
+    -- Taller to fit 6 rows: mode, esp, espRarity, teleportRarity, swordDMG, fortune+ancient, threatEscape
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 270)
-    popupFrame.Position = UDim2.new(1, -270, 1, -390)
+    popupFrame.Size = UDim2.new(0, 250, 0, 490)
+    popupFrame.Position = UDim2.new(1, -270, 1, -610)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -201,7 +204,62 @@ local function createGUI()
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
 
-    -- TELEPORT MODE BUTTON (highest rarity vs nearest)
+    -- ==================== HELPER: make a labeled TextBox row ====================
+    local function makeRarityRow(parent, yPos, labelText, currentValue, onChanged)
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, -20, 0, 40)
+        container.Position = UDim2.new(0, 10, 0, yPos)
+        container.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        container.BorderSizePixel = 0
+        container.Parent = parent
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = container
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0.62, 0, 1, 0)
+        label.Position = UDim2.new(0, 8, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = labelText
+        label.TextColor3 = Color3.fromRGB(200, 200, 200)
+        label.TextSize = 14
+        label.Font = Enum.Font.GothamBold
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = container
+
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(0.35, 0, 0.7, 0)
+        box.Position = UDim2.new(0.63, 0, 0.15, 0)
+        box.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        box.BorderSizePixel = 0
+        box.Text = tostring(currentValue)
+        box.TextColor3 = Color3.fromRGB(255, 255, 255)
+        box.TextSize = 14
+        box.Font = Enum.Font.GothamBold
+        box.ClearTextOnFocus = false
+        box.Parent = container
+
+        local boxCorner = Instance.new("UICorner")
+        boxCorner.CornerRadius = UDim.new(0, 6)
+        boxCorner.Parent = box
+
+        box.FocusLost:Connect(function()
+            local num = tonumber(box.Text)
+            if num then
+                num = math.clamp(math.floor(num), 0, 10000)
+                box.Text = tostring(num)
+                onChanged(num)
+                print(labelText .. " set to " .. tostring(num))
+            else
+                box.Text = tostring(currentValue)
+            end
+        end)
+
+        return container
+    end
+
+    -- ==================== ROW 1: TELEPORT MODE ====================
     local teleportModeButton = Instance.new("TextButton")
     teleportModeButton.Name = "TeleportModeButton"
     teleportModeButton.Size = UDim2.new(1, -20, 0, 40)
@@ -218,10 +276,38 @@ local function createGUI()
     teleportModeCorner.CornerRadius = UDim.new(0, 8)
     teleportModeCorner.Parent = teleportModeButton
 
+    -- ==================== ROW 2: TELEPORT MIN RARITY ====================
+    makeRarityRow(popupFrame, 100, "teleport min rarity:", TELEPORT_MIN_RARITY, function(val)
+        TELEPORT_MIN_RARITY = val
+    end)
+
+    -- ==================== ROW 3: ESP TOGGLE ====================
+    local espToggleButton = Instance.new("TextButton")
+    espToggleButton.Name = "ESPToggleButton"
+    espToggleButton.Size = UDim2.new(1, -20, 0, 40)
+    espToggleButton.Position = UDim2.new(0, 10, 0, 150)
+    espToggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    espToggleButton.BorderSizePixel = 0
+    espToggleButton.Text = "ESP: on"
+    espToggleButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+    espToggleButton.TextSize = 16
+    espToggleButton.Font = Enum.Font.GothamBold
+    espToggleButton.Parent = popupFrame
+
+    local espToggleCorner = Instance.new("UICorner")
+    espToggleCorner.CornerRadius = UDim.new(0, 8)
+    espToggleCorner.Parent = espToggleButton
+
+    -- ==================== ROW 4: ESP MIN RARITY ====================
+    makeRarityRow(popupFrame, 200, "ESP min rarity:", MIN_RARITY, function(val)
+        MIN_RARITY = val
+    end)
+
+    -- ==================== ROW 5: SWORD DMG ====================
     local swordDMGButton = Instance.new("TextButton")
     swordDMGButton.Name = "SwordDMGButton"
     swordDMGButton.Size = UDim2.new(1, -20, 0, 40)
-    swordDMGButton.Position = UDim2.new(0, 10, 0, 100)
+    swordDMGButton.Position = UDim2.new(0, 10, 0, 250)
     swordDMGButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     swordDMGButton.BorderSizePixel = 0
     swordDMGButton.Text = "swordDMG: on"
@@ -234,10 +320,11 @@ local function createGUI()
     swordDMGCorner.CornerRadius = UDim.new(0, 8)
     swordDMGCorner.Parent = swordDMGButton
 
+    -- ==================== ROW 6: FORTUNE + ANCIENT ====================
     local fortuneAncientButton = Instance.new("TextButton")
     fortuneAncientButton.Name = "FortuneAncientButton"
     fortuneAncientButton.Size = UDim2.new(1, -20, 0, 40)
-    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 150)
+    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 300)
     fortuneAncientButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     fortuneAncientButton.BorderSizePixel = 0
     fortuneAncientButton.Text = "fortune+ancient: on"
@@ -250,10 +337,11 @@ local function createGUI()
     fortuneAncientCorner.CornerRadius = UDim.new(0, 8)
     fortuneAncientCorner.Parent = fortuneAncientButton
 
+    -- ==================== ROW 7: THREAT ESCAPE ====================
     local threatButton = Instance.new("TextButton")
     threatButton.Name = "ThreatButton"
     threatButton.Size = UDim2.new(1, -20, 0, 40)
-    threatButton.Position = UDim2.new(0, 10, 0, 200)
+    threatButton.Position = UDim2.new(0, 10, 0, 350)
     threatButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     threatButton.BorderSizePixel = 0
     threatButton.Text = "threatEscape: on"
@@ -266,6 +354,7 @@ local function createGUI()
     threatCorner.CornerRadius = UDim.new(0, 8)
     threatCorner.Parent = threatButton
 
+    -- ==================== BUTTON LOGIC ====================
     mainButton.MouseButton1Click:Connect(function()
         popupFrame.Visible = not popupFrame.Visible
     end)
@@ -280,6 +369,21 @@ local function createGUI()
             teleportModeButton.Text = "mode: nearest"
             teleportModeButton.TextColor3 = Color3.fromRGB(255, 200, 70)
             print("Teleport Mode: NEAREST")
+        end
+    end)
+
+    espToggleButton.MouseButton1Click:Connect(function()
+        espEnabled = not espEnabled
+        if espEnabled then
+            espToggleButton.Text = "ESP: on"
+            espToggleButton.TextColor3 = Color3.fromRGB(70, 255, 70)
+            print("NPC ESP: ENABLED")
+        else
+            espToggleButton.Text = "ESP: off"
+            espToggleButton.TextColor3 = Color3.fromRGB(255, 70, 70)
+            for npc, billboard in pairs(espObjects) do billboard:Destroy() end
+            espObjects = {}
+            print("NPC ESP: DISABLED")
         end
     end)
 
@@ -325,10 +429,13 @@ local function createGUI()
     end)
 
     task.spawn(function()
-	while true do
-		local triple = findTriple()
-		tripleBox.Text = tostring(triple) .. " - triple"
-		task.wait(3) end end)
+        while true do
+            local triple = findTriple()
+            tripleBox.Text = tostring(triple) .. " - triple"
+            task.wait(3)
+        end
+    end)
+
     return screenGui
 end
 
@@ -368,7 +475,7 @@ local function findTargetNPC(character)
                     local distance = (rootPart.Position - head.Position).Magnitude
                     if distance <= TELEPORT_MAX_RANGE then
                         local rarityValue = npc:GetAttribute("Rarity")
-                        if rarityValue and rarityValue > 60 and rarityValue > highestRarity then
+                        if rarityValue and rarityValue > TELEPORT_MIN_RARITY and rarityValue > highestRarity then
                             highestRarity = rarityValue
                             bestHead = head
                         end
@@ -384,7 +491,8 @@ local function findTargetNPC(character)
                 local humanoid = npc:FindFirstChildOfClass("Humanoid")
                 if head and humanoid and humanoid.Health > 0 and not isPlayerHead(head) then
                     local distance = (rootPart.Position - head.Position).Magnitude
-                    if distance < nearestDistance then
+                    local rarityValue = npc:GetAttribute("Rarity")
+                    if distance < nearestDistance and rarityValue and rarityValue > TELEPORT_MIN_RARITY then
                         nearestDistance = distance
                         bestHead = head
                     end
@@ -462,7 +570,11 @@ local function createESP(npc)
     if not rarityValue or rarityValue <= MIN_RARITY then return end
     local gui = head:FindFirstChild("Gui")
     if not gui then return end
-    local rarityLabel = gui:FindFirstChild("Rarity")
+    local main = gui:FindFirstChild("Main")
+    if not main then return end
+    local info = main:FindFirstChild("Info")
+    if not info then return end
+    local rarityLabel = info:FindFirstChild("Rarity")
     if not rarityLabel or not rarityLabel:IsA("TextLabel") then return end
     local rarityText = rarityLabel.Text
     local mobName = npc.Name
@@ -490,6 +602,7 @@ local function removeESP(npc)
 end
 
 local function shouldHaveESP(npc, playerChar)
+    if not espEnabled then return false end
     if not npc or not npc:IsA("Model") then return false end
     if not playerChar or not playerChar:FindFirstChild("HumanoidRootPart") then return false end
     local head = npc:FindFirstChild("Head")
@@ -608,8 +721,6 @@ Players.PlayerAdded:Connect(function(targetPlayer)
 end)
 
 -- ==================== FORTUNE + ANCIENT + INSIGHT FUNCTIONS ====================
--- Enchant IDs: 0 = Fortune, 11 = Ancient, 13 = Insight
-
 local function hasFortuneAndAncient(sword)
     local enchant1 = sword:GetAttribute("Enchant1")
     local enchant2 = sword:GetAttribute("Enchant2")
@@ -626,8 +737,6 @@ local function hasFortuneAndAncient(sword)
         if enchant == 13 then insightCount = insightCount + 1 end
     end
 
-    -- Original: 2x ancient, OR 1x ancient + 2x fortune
-    -- New:      ancient + fortune + insight (one of each)
     return ancientCount >= 2
         or (ancientCount >= 1 and fortuneCount >= 2)
         or (ancientCount >= 1 and fortuneCount >= 1 and insightCount >= 1)
