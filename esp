@@ -15,12 +15,23 @@ local teleportHighestRarity = true
 local teleportConnection
 local HOVER_HEIGHT = -9
 local TELEPORT_MAX_RANGE = 750
-local TELEPORT_MIN_RARITY = 60  -- used by teleport filter
 local CHECK_INTERVAL = 0.2
 local GYRO_TORQUE = 9e14
 local bodyVelocity
 local bodyGyro
 local currentTarget = nil
+
+-- ==================== AUTO ROTATE CONFIGURATION ====================
+local autoRotateEnabled = false
+local autoRotateCharacter, autoRotateHRP
+local AUTO_ROTATE_RANGE = 35
+
+local function updateAutoRotateCharacter()
+    autoRotateCharacter = player.Character or player.CharacterAdded:Wait()
+    autoRotateHRP = autoRotateCharacter:WaitForChild("HumanoidRootPart")
+end
+updateAutoRotateCharacter()
+player.CharacterAdded:Connect(updateAutoRotateCharacter)
 
 -- ==================== ESP CONFIGURATION ====================
 local espEnabled = true
@@ -29,17 +40,25 @@ local MIN_RARITY = 70
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
+local lowHealthTeleportEnabled = true
 local LOW_HEALTH_THRESHOLD_WITH_PLAYERS = 0.5
 local LOW_HEALTH_THRESHOLD_NO_PLAYERS = 0.25
 local PLAYER_DETECTION_RANGE = 750
 local wasAboveThreshold = true
+
+-- ==================== HIGH DAMAGE THREAT DETECTION ====================
+local threatDetectionEnabled = true
+local hasEscapedThreat = {}
+local THREAT_DETECTION_RANGE = 65
+local CRIT_MULTIPLIER = 5
+local HITS_TO_KILL = 5
 
 -- ==================== SWORD DAMAGE ESP CONFIGURATION ====================
 local swordDMGEnabled = true
 local swordESPObjects = {}
 
 -- ==================== FORTUNE + ANCIENT CONFIGURATION ====================
-local fortuneAncientEnabled = true
+local fortuneAncientEnabled = false
 local fortuneAncientParts = {}
 local trackedSwords = {}
 
@@ -49,13 +68,6 @@ local CYCLE_DELAY = 0.5
 local CHARACTER_REFRESH = 0.2
 local autoEquipCharacter
 local autoEquipHumanoid
-
--- ==================== ONE SHOT THREAT DETECTION ====================
-local threatDetectionEnabled = true
-local hasEscapedThreat = {}
-local THREAT_DETECTION_RANGE = 65
-local CRIT_MULTIPLIER = 5
-local HITS_TO_KILL = 5
 
 -- ==================== NUMBER ABBREVIATION FUNCTION ====================
 local function abbreviateNumber(num)
@@ -122,15 +134,47 @@ local Luck100 = ReplicatedStorage.Values.Spawns.Luck100
 local Luck500 = ReplicatedStorage.Values.Spawns.Luck500
 
 local function findTriple()
-	for i = 0,1000000 do
-		if (Luck25.Value - i) % 6 == 0
-		and (Luck100.Value - i) % 16 == 0
-		and (Luck500.Value - i) % 51 == 0 then
-			return i
-		end
-	end
-	return "?"
+    for i = 0, 1000000 do
+        if (Luck25.Value - i) % 6 == 0
+            and (Luck100.Value - i) % 16 == 0
+            and (Luck500.Value - i) % 51 == 0 then
+            return i
+        end
+    end
+    return "?"
 end
+
+-- ==================== TELEPORTS + CASH GUI RESIZER ====================
+task.spawn(function()
+    local playerGui = player:WaitForChild("PlayerGui")
+    local mainGui = playerGui:WaitForChild("Main")
+    local topFrame = mainGui:WaitForChild("Top")
+    local teleportsLabel = topFrame:WaitForChild("Teleports")
+    local cashLabel = topFrame:WaitForChild("Cash")
+    while true do
+        teleportsLabel.Size = UDim2.new(0.3, 0, 0.22, 0)
+        cashLabel.Size = UDim2.new(0.3, 0, 0.25, 0)
+        task.wait(15)
+    end
+end)
+
+-- ==================== TOUCH INTEREST CLEANER ====================
+task.spawn(function()
+    local areas = workspace:WaitForChild("Areas")
+    local heavenlyGates = areas:WaitForChild("Heavenly Gates")
+    local mapFolder = heavenlyGates:WaitForChild("Map")
+    local decorFolder = mapFolder:WaitForChild("Decor")
+    local damageFolder = decorFolder:WaitForChild("Damage")
+
+    while true do
+        for _, desc in pairs(damageFolder:GetDescendants()) do
+            if desc:IsA("TouchTransmitter") or desc.ClassName == "TouchInterest" then
+                pcall(function() desc:Destroy() end)
+            end
+        end
+        task.wait(3)
+    end
+end)
 
 -- ==================== GUI CREATION ====================
 local function createGUI()
@@ -140,48 +184,30 @@ local function createGUI()
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.Parent = player:WaitForChild("PlayerGui")
 
-    local mainButton = Instance.new("TextButton")
-    mainButton.Name = "MainButton"
-    mainButton.Size = UDim2.new(0, 65, 0, 65)
-    mainButton.Position = UDim2.new(1, -100, 1, -100)
-    mainButton.AnchorPoint = Vector2.new(0, 0)
-    mainButton.BackgroundColor3 = Color3.fromRGB(218, 182, 196)
-    mainButton.BorderSizePixel = 2
-    mainButton.BorderColor3 = Color3.fromRGB(255, 255, 255)
-    mainButton.Text = "⚙️"
-    mainButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    mainButton.TextSize = 32
-    mainButton.Font = Enum.Font.GothamBold
-    mainButton.Parent = screenGui
-
     -- ==================== TRIPLE DISPLAY BOX ====================
     local tripleBox = Instance.new("TextLabel")
     tripleBox.Name = "TripleDisplay"
-    tripleBox.Size = UDim2.new(0, 90, 0, 45)
-    tripleBox.Position = UDim2.new(1, -200, 1, -95)
-    tripleBox.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    tripleBox.Size = UDim2.new(0, 125, 0, 45)
+    tripleBox.Position = UDim2.new(1, -1605, 1, -150)
+    tripleBox.BackgroundColor3 = Color3.fromRGB(106, 0, 0)
+    tripleBox.BackgroundTransparency = 0.4
     tripleBox.BorderSizePixel = 2
-    tripleBox.BorderColor3 = Color3.fromRGB(255,255,255)
+    tripleBox.BorderColor3 = Color3.fromRGB(255, 255, 255)
     tripleBox.Text = "..."
-    tripleBox.TextColor3 = Color3.fromRGB(255,255,255)
+    tripleBox.TextColor3 = Color3.fromRGB(255, 255, 255)
     tripleBox.TextScaled = true
     tripleBox.Font = Enum.Font.GothamBold
     tripleBox.Parent = screenGui
 
     local tripleCorner = Instance.new("UICorner")
-    tripleCorner.CornerRadius = UDim.new(0,10)
+    tripleCorner.CornerRadius = UDim.new(0, 10)
     tripleCorner.Parent = tripleBox
 
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 12)
-    mainCorner.Parent = mainButton
-
     -- ==================== POPUP FRAME ====================
-    -- Taller to fit 6 rows: mode, esp, espRarity, teleportRarity, swordDMG, fortune+ancient, threatEscape
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 490)
-    popupFrame.Position = UDim2.new(1, -270, 1, -610)
+    popupFrame.Size = UDim2.new(0, 250, 0, 570)
+    popupFrame.Position = UDim2.new(1, -270, 1, -690)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -259,6 +285,32 @@ local function createGUI()
         return container
     end
 
+    -- ==================== HELPER: toggle button ====================
+    local function makeToggleButton(parent, yPos, labelOn, labelOff, startEnabled, onToggle)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -20, 0, 40)
+        btn.Position = UDim2.new(0, 10, 0, yPos)
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        btn.BorderSizePixel = 0
+        btn.Text = startEnabled and labelOn or labelOff
+        btn.TextColor3 = startEnabled and Color3.fromRGB(70, 255, 70) or Color3.fromRGB(255, 70, 70)
+        btn.TextSize = 16
+        btn.Font = Enum.Font.GothamBold
+        btn.Parent = parent
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = btn
+
+        btn.MouseButton1Click:Connect(function()
+            local newState = onToggle()
+            btn.Text = newState and labelOn or labelOff
+            btn.TextColor3 = newState and Color3.fromRGB(70, 255, 70) or Color3.fromRGB(255, 70, 70)
+        end)
+
+        return btn
+    end
+
     -- ==================== ROW 1: TELEPORT MODE ====================
     local teleportModeButton = Instance.new("TextButton")
     teleportModeButton.Name = "TeleportModeButton"
@@ -276,89 +328,61 @@ local function createGUI()
     teleportModeCorner.CornerRadius = UDim.new(0, 8)
     teleportModeCorner.Parent = teleportModeButton
 
-    -- ==================== ROW 2: TELEPORT MIN RARITY ====================
-    makeRarityRow(popupFrame, 100, "teleport min rarity:", TELEPORT_MIN_RARITY, function(val)
-        TELEPORT_MIN_RARITY = val
+    -- ==================== ROW 2: ESP TOGGLE ====================
+    makeToggleButton(popupFrame, 100, "ESP: on", "ESP: off", espEnabled, function()
+        espEnabled = not espEnabled
+        if not espEnabled then
+            for npc, billboard in pairs(espObjects) do billboard:Destroy() end
+            espObjects = {}
+            print("NPC ESP: DISABLED")
+        else
+            print("NPC ESP: ENABLED")
+        end
+        return espEnabled
     end)
 
-    -- ==================== ROW 3: ESP TOGGLE ====================
-    local espToggleButton = Instance.new("TextButton")
-    espToggleButton.Name = "ESPToggleButton"
-    espToggleButton.Size = UDim2.new(1, -20, 0, 40)
-    espToggleButton.Position = UDim2.new(0, 10, 0, 150)
-    espToggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    espToggleButton.BorderSizePixel = 0
-    espToggleButton.Text = "ESP: on"
-    espToggleButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-    espToggleButton.TextSize = 16
-    espToggleButton.Font = Enum.Font.GothamBold
-    espToggleButton.Parent = popupFrame
-
-    local espToggleCorner = Instance.new("UICorner")
-    espToggleCorner.CornerRadius = UDim.new(0, 8)
-    espToggleCorner.Parent = espToggleButton
-
-    -- ==================== ROW 4: ESP MIN RARITY ====================
-    makeRarityRow(popupFrame, 200, "ESP min rarity:", MIN_RARITY, function(val)
+    -- ==================== ROW 3: ESP MIN RARITY ====================
+    makeRarityRow(popupFrame, 150, "ESP min rarity:", MIN_RARITY, function(val)
         MIN_RARITY = val
     end)
 
-    -- ==================== ROW 5: SWORD DMG ====================
-    local swordDMGButton = Instance.new("TextButton")
-    swordDMGButton.Name = "SwordDMGButton"
-    swordDMGButton.Size = UDim2.new(1, -20, 0, 40)
-    swordDMGButton.Position = UDim2.new(0, 10, 0, 250)
-    swordDMGButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    swordDMGButton.BorderSizePixel = 0
-    swordDMGButton.Text = "swordDMG: on"
-    swordDMGButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-    swordDMGButton.TextSize = 16
-    swordDMGButton.Font = Enum.Font.GothamBold
-    swordDMGButton.Parent = popupFrame
-
-    local swordDMGCorner = Instance.new("UICorner")
-    swordDMGCorner.CornerRadius = UDim.new(0, 8)
-    swordDMGCorner.Parent = swordDMGButton
-
-    -- ==================== ROW 6: FORTUNE + ANCIENT ====================
-    local fortuneAncientButton = Instance.new("TextButton")
-    fortuneAncientButton.Name = "FortuneAncientButton"
-    fortuneAncientButton.Size = UDim2.new(1, -20, 0, 40)
-    fortuneAncientButton.Position = UDim2.new(0, 10, 0, 300)
-    fortuneAncientButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    fortuneAncientButton.BorderSizePixel = 0
-    fortuneAncientButton.Text = "fortune+ancient: on"
-    fortuneAncientButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-    fortuneAncientButton.TextSize = 16
-    fortuneAncientButton.Font = Enum.Font.GothamBold
-    fortuneAncientButton.Parent = popupFrame
-
-    local fortuneAncientCorner = Instance.new("UICorner")
-    fortuneAncientCorner.CornerRadius = UDim.new(0, 8)
-    fortuneAncientCorner.Parent = fortuneAncientButton
-
-    -- ==================== ROW 7: THREAT ESCAPE ====================
-    local threatButton = Instance.new("TextButton")
-    threatButton.Name = "ThreatButton"
-    threatButton.Size = UDim2.new(1, -20, 0, 40)
-    threatButton.Position = UDim2.new(0, 10, 0, 350)
-    threatButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    threatButton.BorderSizePixel = 0
-    threatButton.Text = "threatEscape: on"
-    threatButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-    threatButton.TextSize = 16
-    threatButton.Font = Enum.Font.GothamBold
-    threatButton.Parent = popupFrame
-
-    local threatCorner = Instance.new("UICorner")
-    threatCorner.CornerRadius = UDim.new(0, 8)
-    threatCorner.Parent = threatButton
-
-    -- ==================== BUTTON LOGIC ====================
-    mainButton.MouseButton1Click:Connect(function()
-        popupFrame.Visible = not popupFrame.Visible
+    -- ==================== ROW 4: SWORD DMG ====================
+    makeToggleButton(popupFrame, 200, "swordDMG: on", "swordDMG: off", swordDMGEnabled, function()
+        swordDMGEnabled = not swordDMGEnabled
+        if not swordDMGEnabled then
+            for plr, billboard in pairs(swordESPObjects) do billboard:Destroy() end
+            swordESPObjects = {}
+        end
+        return swordDMGEnabled
     end)
 
+    -- ==================== ROW 5: FORTUNE + ANCIENT ====================
+    makeToggleButton(popupFrame, 250, "fortune+ancient: on", "fortune+ancient: off", fortuneAncientEnabled, function()
+        fortuneAncientEnabled = not fortuneAncientEnabled
+        if not fortuneAncientEnabled then
+            for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
+            fortuneAncientParts = {}
+            trackedSwords = {}
+        end
+        return fortuneAncientEnabled
+    end)
+
+    -- ==================== ROW 6: LOW HEALTH TELEPORT ====================
+    makeToggleButton(popupFrame, 300, "lowHP teleport: on", "lowHP teleport: off", lowHealthTeleportEnabled, function()
+        lowHealthTeleportEnabled = not lowHealthTeleportEnabled
+        print("Low Health Teleport: " .. (lowHealthTeleportEnabled and "ENABLED" or "DISABLED"))
+        return lowHealthTeleportEnabled
+    end)
+
+    -- ==================== ROW 7: HIGH DAMAGE THREAT ESCAPE ====================
+    makeToggleButton(popupFrame, 350, "highDMG escape: on", "highDMG escape: off", threatDetectionEnabled, function()
+        threatDetectionEnabled = not threatDetectionEnabled
+        if not threatDetectionEnabled then hasEscapedThreat = {} end
+        print("High Damage Threat Escape: " .. (threatDetectionEnabled and "ENABLED" or "DISABLED"))
+        return threatDetectionEnabled
+    end)
+
+    -- ==================== TELEPORT MODE LOGIC ====================
     teleportModeButton.MouseButton1Click:Connect(function()
         teleportHighestRarity = not teleportHighestRarity
         if teleportHighestRarity then
@@ -372,67 +396,20 @@ local function createGUI()
         end
     end)
 
-    espToggleButton.MouseButton1Click:Connect(function()
-        espEnabled = not espEnabled
-        if espEnabled then
-            espToggleButton.Text = "ESP: on"
-            espToggleButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-            print("NPC ESP: ENABLED")
-        else
-            espToggleButton.Text = "ESP: off"
-            espToggleButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-            for npc, billboard in pairs(espObjects) do billboard:Destroy() end
-            espObjects = {}
-            print("NPC ESP: DISABLED")
-        end
-    end)
-
-    swordDMGButton.MouseButton1Click:Connect(function()
-        swordDMGEnabled = not swordDMGEnabled
-        if swordDMGEnabled then
-            swordDMGButton.Text = "swordDMG: on"
-            swordDMGButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-        else
-            swordDMGButton.Text = "swordDMG: off"
-            swordDMGButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-            for plr, billboard in pairs(swordESPObjects) do billboard:Destroy() end
-            swordESPObjects = {}
-        end
-    end)
-
-    fortuneAncientButton.MouseButton1Click:Connect(function()
-        fortuneAncientEnabled = not fortuneAncientEnabled
-        if fortuneAncientEnabled then
-            fortuneAncientButton.Text = "fortune+ancient: on"
-            fortuneAncientButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-        else
-            fortuneAncientButton.Text = "fortune+ancient: off"
-            fortuneAncientButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-            for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
-            fortuneAncientParts = {}
-            trackedSwords = {}
-        end
-    end)
-
-    threatButton.MouseButton1Click:Connect(function()
-        threatDetectionEnabled = not threatDetectionEnabled
-        if threatDetectionEnabled then
-            threatButton.Text = "threatEscape: on"
-            threatButton.TextColor3 = Color3.fromRGB(70, 255, 70)
-            print("Threat Escape: ENABLED")
-        else
-            threatButton.Text = "threatEscape: off"
-            threatButton.TextColor3 = Color3.fromRGB(255, 70, 70)
-            hasEscapedThreat = {}
-            print("Threat Escape: DISABLED")
-        end
-    end)
-
+    -- ==================== TRIPLE LOOP ====================
     task.spawn(function()
         while true do
             local triple = findTriple()
             tripleBox.Text = tostring(triple) .. " - triple"
             task.wait(3)
+        end
+    end)
+
+    -- ==================== KEYBIND: = to toggle GUI ====================
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == Enum.KeyCode.Equals then
+            popupFrame.Visible = not popupFrame.Visible
         end
     end)
 
@@ -464,36 +441,18 @@ local function findTargetNPC(character)
     if not npcsFolder then return nil end
 
     local bestHead = nil
+    local highestRarity = -math.huge
 
-    if teleportHighestRarity then
-        local highestRarity = -math.huge
-        for _, npc in pairs(npcsFolder:GetChildren()) do
-            if npc:IsA("Model") then
-                local head = npc:FindFirstChild("Head")
-                local humanoid = npc:FindFirstChildOfClass("Humanoid")
-                if head and humanoid and humanoid.Health > 0 and not isPlayerHead(head) then
-                    local distance = (rootPart.Position - head.Position).Magnitude
-                    if distance <= TELEPORT_MAX_RANGE then
-                        local rarityValue = npc:GetAttribute("Rarity")
-                        if rarityValue and rarityValue > TELEPORT_MIN_RARITY and rarityValue > highestRarity then
-                            highestRarity = rarityValue
-                            bestHead = head
-                        end
-                    end
-                end
-            end
-        end
-    else
-        local nearestDistance = TELEPORT_MAX_RANGE
-        for _, npc in pairs(npcsFolder:GetChildren()) do
-            if npc:IsA("Model") then
-                local head = npc:FindFirstChild("Head")
-                local humanoid = npc:FindFirstChildOfClass("Humanoid")
-                if head and humanoid and humanoid.Health > 0 and not isPlayerHead(head) then
-                    local distance = (rootPart.Position - head.Position).Magnitude
+    for _, npc in pairs(npcsFolder:GetChildren()) do
+        if npc:IsA("Model") then
+            local head = npc:FindFirstChild("Head")
+            local humanoid = npc:FindFirstChildOfClass("Humanoid")
+            if head and humanoid and humanoid.Health > 0 and not isPlayerHead(head) then
+                local distance = (rootPart.Position - head.Position).Magnitude
+                if distance <= TELEPORT_MAX_RANGE then
                     local rarityValue = npc:GetAttribute("Rarity")
-                    if distance < nearestDistance and rarityValue and rarityValue > TELEPORT_MIN_RARITY then
-                        nearestDistance = distance
+                    if rarityValue and rarityValue > highestRarity then
+                        highestRarity = rarityValue
                         bestHead = head
                     end
                 end
@@ -560,6 +519,36 @@ function stopTeleportLoop()
     removeBodyMovers()
     currentTarget = nil
 end
+
+-- ==================== AUTO ROTATE LOOP ====================
+RunService.RenderStepped:Connect(function()
+    if not autoRotateEnabled then return end
+    if not autoRotateHRP then return end
+
+    local closest = nil
+    local closestDist = AUTO_ROTATE_RANGE
+
+    local npcsFolder = workspace:FindFirstChild("NPCs")
+    if not npcsFolder then return end
+
+    for _, npc in pairs(npcsFolder:GetChildren()) do
+        local hrp = npc:FindFirstChild("HumanoidRootPart")
+        local hum = npc:FindFirstChildOfClass("Humanoid")
+        if hrp and hum and hum.Health > 0 then
+            local dist = (hrp.Position - autoRotateHRP.Position).Magnitude
+            if dist <= closestDist then
+                closestDist = dist
+                closest = hrp
+            end
+        end
+    end
+
+    if not closest then return end
+
+    local pos = autoRotateHRP.Position
+    local look = Vector3.new(closest.Position.X, pos.Y, closest.Position.Z)
+    autoRotateHRP.CFrame = CFrame.lookAt(pos, look)
+end)
 
 -- ==================== ESP FUNCTIONS ====================
 local function createESP(npc)
@@ -721,8 +710,6 @@ Players.PlayerAdded:Connect(function(targetPlayer)
 end)
 
 -- ==================== FORTUNE + ANCIENT + INSIGHT FUNCTIONS ====================
--- Enchant IDs: 0 = Fortune, 11 = Ancient, 13 = Insight
-
 local function classifyEnchants(sword)
     local enchant1 = sword:GetAttribute("Enchant1")
     local enchant2 = sword:GetAttribute("Enchant2")
@@ -739,30 +726,18 @@ local function classifyEnchants(sword)
         if enchant == 13 then insightCount = insightCount + 1 end
     end
 
-    -- ANCIENT ANCIENT FORTUNE (2x ancient, 1x fortune) → dark red (existing)
-    if ancientCount >= 2 and fortuneCount >= 1 then
-        return "AAF"
-    end
-    -- ANCIENT FORTUNE FORTUNE (1x ancient, 2x fortune) → gold
-    if ancientCount >= 1 and fortuneCount >= 2 then
-        return "AFF"
-    end
-    -- ANCIENT FORTUNE INSIGHT (1x each) → purple
-    if ancientCount >= 1 and fortuneCount >= 1 and insightCount >= 1 then
-        return "AFI"
-    end
-    -- ANCIENT ANCIENT (no fortune, no insight) → dark red fallback
-    if ancientCount >= 2 then
-        return "AAF"
-    end
+    if ancientCount >= 2 and fortuneCount >= 1 then return "AAF" end
+    if ancientCount >= 1 and fortuneCount >= 2 then return "AFF" end
+    if ancientCount >= 1 and fortuneCount >= 1 and insightCount >= 1 then return "AFI" end
+    if ancientCount >= 2 then return "AAF" end
 
-    return nil -- no qualifying combo
+    return nil
 end
 
 local ENCHANT_COLORS = {
-    AAF = Color3.fromRGB(117, 0, 0),      -- ancient ancient fortune → dark red
-    AFF = Color3.fromRGB(248, 217, 109),  -- ancient fortune fortune → gold
-    AFI = Color3.fromRGB(129, 125, 255),  -- ancient fortune insight → purple
+    AAF = Color3.fromRGB(117, 0, 0),
+    AFF = Color3.fromRGB(248, 217, 109),
+    AFI = Color3.fromRGB(129, 125, 255),
 }
 
 local function createFortuneAncientPart(sword)
@@ -861,12 +836,12 @@ local function getTools()
     local tools = {}
     local backpack = player:FindFirstChild("Backpack")
     if backpack then
-        for _,v in pairs(backpack:GetChildren()) do
+        for _, v in pairs(backpack:GetChildren()) do
             if v:IsA("Tool") then table.insert(tools, v) end
         end
     end
     if autoEquipCharacter then
-        for _,v in pairs(autoEquipCharacter:GetChildren()) do
+        for _, v in pairs(autoEquipCharacter:GetChildren()) do
             if v:IsA("Tool") then table.insert(tools, v) end
         end
     end
@@ -908,6 +883,7 @@ local function setupHealthMonitor(character)
     local humanoid = character:WaitForChild("Humanoid")
     wasAboveThreshold = true
     humanoid.HealthChanged:Connect(function(health)
+        if not lowHealthTeleportEnabled then return end
         local healthPercent = health / humanoid.MaxHealth
         local playerNearby = isPlayerNearby()
         local threshold = playerNearby and LOW_HEALTH_THRESHOLD_WITH_PLAYERS or LOW_HEALTH_THRESHOLD_NO_PLAYERS
@@ -930,7 +906,7 @@ local function setupHealthMonitor(character)
     end)
 end
 
--- ==================== ONE SHOT THREAT DETECTION ====================
+-- ==================== HIGH DAMAGE THREAT DETECTION ====================
 local function getThreatPlayers(character)
     if not character or not character:FindFirstChild("HumanoidRootPart") then return {} end
 
@@ -975,9 +951,9 @@ local function escapeThreat()
         ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
     end)
     if success then
-        print("One-Shot Threat Escape: Teleported to safe zone!")
+        print("High Damage Threat Escape: Teleported to safe zone!")
     else
-        warn("One-Shot Threat Escape: Remote failed - " .. tostring(err))
+        warn("High Damage Threat Escape: Remote failed - " .. tostring(err))
     end
 end
 
@@ -995,7 +971,7 @@ local function threatDetectionLoop()
             for _, t in ipairs(threats) do key = key .. t.UserId end
             if not hasEscapedThreat[key] then
                 hasEscapedThreat[key] = true
-                print("One-Shot Threat Detected! Escaping...")
+                print("High Damage Threat Detected! Escaping...")
                 escapeThreat()
             end
         else
@@ -1007,6 +983,7 @@ end
 -- ==================== CHARACTER RESPAWN HANDLER ====================
 player.CharacterAdded:Connect(function(character)
     setupHealthMonitor(character)
+    updateAutoRotateCharacter()
     if teleportEnabled then
         character:WaitForChild("HumanoidRootPart")
         wait(0.1)
@@ -1018,9 +995,15 @@ end)
 -- ==================== KEYBINDS ====================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
+
+    -- F: toggle teleport (disables auto rotate if on)
     if input.KeyCode == Enum.KeyCode.F then
         teleportEnabled = not teleportEnabled
         if teleportEnabled then
+            if autoRotateEnabled then
+                autoRotateEnabled = false
+                print("Teleport ON: AutoRotate disabled")
+            end
             print("NPC Teleport: ENABLED")
             teleportLoop()
         else
@@ -1028,7 +1011,27 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
             stopTeleportLoop()
         end
     end
-    if input.KeyCode == Enum.KeyCode.J then autoEquipEnabled = not autoEquipEnabled end
+
+    -- L: toggle auto rotate (disables teleport if on)
+    if input.KeyCode == Enum.KeyCode.L then
+        autoRotateEnabled = not autoRotateEnabled
+        if autoRotateEnabled then
+            if teleportEnabled then
+                teleportEnabled = false
+                stopTeleportLoop()
+                print("AutoRotate ON: Teleport disabled")
+            end
+            print("Auto Rotate: ENABLED")
+        else
+            print("Auto Rotate: DISABLED")
+        end
+    end
+
+    -- J: toggle auto equip
+    if input.KeyCode == Enum.KeyCode.J then
+        autoEquipEnabled = not autoEquipEnabled
+        print("Auto Equip: " .. (autoEquipEnabled and "ENABLED" or "DISABLED"))
+    end
 end)
 
 -- ==================== INITIALIZATION ====================
@@ -1038,11 +1041,12 @@ print("High Rarity ESP: ENABLED (Always On)")
 swordESPLoop()
 print("Sword Damage ESP System: Ready")
 fortuneAncientLoop()
-print("Fortune + Ancient + Insight System: Ready")
+print("Fortune + Ancient + Insight System: Ready (OFF by default)")
 if player.Character then setupHealthMonitor(player.Character) end
 teleportLoop()
-print("NPC Teleport Script Loaded! Teleport ON by default (Highest Rarity mode). Press F to toggle.")
+print("NPC Teleport: Loaded. Press F to toggle. Press L to toggle AutoRotate.")
 print("Auto Equip: Press J to toggle")
 print("Low Health Auto-Teleport: ENABLED (50% with players nearby, 25% when alone)")
 threatDetectionLoop()
-print("One-Shot Threat Detection: ENABLED (65 stud range, crit-aware)")
+print("High Damage Threat Detection: ENABLED (65 stud range, crit-aware)")
+print("GUI Toggle: Press = key")
