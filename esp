@@ -24,7 +24,7 @@ local currentTarget = nil
 -- ==================== AUTO ROTATE CONFIGURATION ====================
 local autoRotateEnabled = false
 local autoRotateCharacter, autoRotateHRP
-local AUTO_ROTATE_RANGE = 35
+local AUTO_ROTATE_RANGE = 20
 
 local function updateAutoRotateCharacter()
     autoRotateCharacter = player.Character or player.CharacterAdded:Wait()
@@ -36,7 +36,7 @@ player.CharacterAdded:Connect(updateAutoRotateCharacter)
 -- ==================== ESP CONFIGURATION ====================
 local espEnabled = true
 local ESP_MAX_RANGE = 750
-local MIN_RARITY = 70
+local MIN_RARITY = 77
 local espObjects = {}
 
 -- ==================== LOW HEALTH TELEPORT CONFIGURATION ====================
@@ -165,7 +165,6 @@ task.spawn(function()
     local mapFolder = heavenlyGates:WaitForChild("Map")
     local decorFolder = mapFolder:WaitForChild("Decor")
     local damageFolder = decorFolder:WaitForChild("Damage")
-
     while true do
         for _, desc in pairs(damageFolder:GetDescendants()) do
             if desc:IsA("TouchTransmitter") or desc.ClassName == "TouchInterest" then
@@ -206,8 +205,8 @@ local function createGUI()
     -- ==================== POPUP FRAME ====================
     local popupFrame = Instance.new("Frame")
     popupFrame.Name = "PopupFrame"
-    popupFrame.Size = UDim2.new(0, 250, 0, 570)
-    popupFrame.Position = UDim2.new(1, -270, 1, -690)
+    popupFrame.Size = UDim2.new(0, 250, 0, 470)
+    popupFrame.Position = UDim2.new(1, -270, 1, -590)
     popupFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     popupFrame.BorderSizePixel = 2
     popupFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
@@ -229,6 +228,43 @@ local function createGUI()
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Center
     titleLabel.Parent = popupFrame
+
+    -- ==================== XP DISPLAY ====================
+    local xpLabel = Instance.new("TextLabel")
+    xpLabel.Name = "XPDisplay"
+    xpLabel.Size = UDim2.new(1, -20, 0, 30)
+    xpLabel.Position = UDim2.new(0, 10, 0, 425)
+    xpLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    xpLabel.BorderSizePixel = 0
+    xpLabel.Text = "XP to level: ..."
+    xpLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    xpLabel.TextSize = 14
+    xpLabel.Font = Enum.Font.GothamBold
+    xpLabel.Parent = popupFrame
+
+    local xpCorner = Instance.new("UICorner")
+    xpCorner.CornerRadius = UDim.new(0, 8)
+    xpCorner.Parent = xpLabel
+
+    task.spawn(function()
+        local playerGui = player:WaitForChild("PlayerGui")
+        local mainGui = playerGui:WaitForChild("Main")
+        local levelBar = mainGui:WaitForChild("Level"):WaitForChild("LevelBar")
+        local levelXP = levelBar:WaitForChild("LevelXP")
+        local counter = levelXP:WaitForChild("Counter")
+        local progressBar = levelBar:WaitForChild("Progress")
+        while true do
+            pcall(function()
+                local progress = progressBar.Size.X.Scale
+                local currentXP = counter.Value
+                if progress > 0 then
+                    local xpNeeded = currentXP / progress
+                    xpLabel.Text = "XP to level: " .. abbreviateNumber(math.floor(xpNeeded - currentXP))
+                end
+            end)
+            task.wait(20)
+        end
+    end)
 
     -- ==================== HELPER: make a labeled TextBox row ====================
     local function makeRarityRow(parent, yPos, labelText, currentValue, onChanged)
@@ -311,25 +347,8 @@ local function createGUI()
         return btn
     end
 
-    -- ==================== ROW 1: TELEPORT MODE ====================
-    local teleportModeButton = Instance.new("TextButton")
-    teleportModeButton.Name = "TeleportModeButton"
-    teleportModeButton.Size = UDim2.new(1, -20, 0, 40)
-    teleportModeButton.Position = UDim2.new(0, 10, 0, 50)
-    teleportModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    teleportModeButton.BorderSizePixel = 0
-    teleportModeButton.Text = "mode: highest rarity"
-    teleportModeButton.TextColor3 = Color3.fromRGB(70, 200, 255)
-    teleportModeButton.TextSize = 16
-    teleportModeButton.Font = Enum.Font.GothamBold
-    teleportModeButton.Parent = popupFrame
-
-    local teleportModeCorner = Instance.new("UICorner")
-    teleportModeCorner.CornerRadius = UDim.new(0, 8)
-    teleportModeCorner.Parent = teleportModeButton
-
-    -- ==================== ROW 2: ESP TOGGLE ====================
-    makeToggleButton(popupFrame, 100, "ESP: on", "ESP: off", espEnabled, function()
+    -- ==================== ROW 1: ESP TOGGLE ====================
+    makeToggleButton(popupFrame, 50, "ESP: on", "ESP: off", espEnabled, function()
         espEnabled = not espEnabled
         if not espEnabled then
             for npc, billboard in pairs(espObjects) do billboard:Destroy() end
@@ -341,13 +360,13 @@ local function createGUI()
         return espEnabled
     end)
 
-    -- ==================== ROW 3: ESP MIN RARITY ====================
-    makeRarityRow(popupFrame, 150, "ESP min rarity:", MIN_RARITY, function(val)
+    -- ==================== ROW 2: ESP MIN RARITY ====================
+    makeRarityRow(popupFrame, 100, "ESP min rarity:", MIN_RARITY, function(val)
         MIN_RARITY = val
     end)
 
-    -- ==================== ROW 4: SWORD DMG ====================
-    makeToggleButton(popupFrame, 200, "swordDMG: on", "swordDMG: off", swordDMGEnabled, function()
+    -- ==================== ROW 3: SWORD DMG ====================
+    makeToggleButton(popupFrame, 150, "swordDMG: on", "swordDMG: off", swordDMGEnabled, function()
         swordDMGEnabled = not swordDMGEnabled
         if not swordDMGEnabled then
             for plr, billboard in pairs(swordESPObjects) do billboard:Destroy() end
@@ -356,8 +375,8 @@ local function createGUI()
         return swordDMGEnabled
     end)
 
-    -- ==================== ROW 5: FORTUNE + ANCIENT ====================
-    makeToggleButton(popupFrame, 250, "fortune+ancient: on", "fortune+ancient: off", fortuneAncientEnabled, function()
+    -- ==================== ROW 4: FORTUNE + ANCIENT ====================
+    makeToggleButton(popupFrame, 200, "fortune+ancient: on", "fortune+ancient: off", fortuneAncientEnabled, function()
         fortuneAncientEnabled = not fortuneAncientEnabled
         if not fortuneAncientEnabled then
             for sword, part in pairs(fortuneAncientParts) do part:Destroy() end
@@ -367,33 +386,19 @@ local function createGUI()
         return fortuneAncientEnabled
     end)
 
-    -- ==================== ROW 6: LOW HEALTH TELEPORT ====================
-    makeToggleButton(popupFrame, 300, "lowHP teleport: on", "lowHP teleport: off", lowHealthTeleportEnabled, function()
+    -- ==================== ROW 5: LOW HEALTH TELEPORT ====================
+    makeToggleButton(popupFrame, 250, "lowHP teleport: on", "lowHP teleport: off", lowHealthTeleportEnabled, function()
         lowHealthTeleportEnabled = not lowHealthTeleportEnabled
         print("Low Health Teleport: " .. (lowHealthTeleportEnabled and "ENABLED" or "DISABLED"))
         return lowHealthTeleportEnabled
     end)
 
-    -- ==================== ROW 7: HIGH DAMAGE THREAT ESCAPE ====================
-    makeToggleButton(popupFrame, 350, "highDMG escape: on", "highDMG escape: off", threatDetectionEnabled, function()
+    -- ==================== ROW 6: HIGH DAMAGE THREAT ESCAPE ====================
+    makeToggleButton(popupFrame, 300, "highDMG escape: on", "highDMG escape: off", threatDetectionEnabled, function()
         threatDetectionEnabled = not threatDetectionEnabled
         if not threatDetectionEnabled then hasEscapedThreat = {} end
         print("High Damage Threat Escape: " .. (threatDetectionEnabled and "ENABLED" or "DISABLED"))
         return threatDetectionEnabled
-    end)
-
-    -- ==================== TELEPORT MODE LOGIC ====================
-    teleportModeButton.MouseButton1Click:Connect(function()
-        teleportHighestRarity = not teleportHighestRarity
-        if teleportHighestRarity then
-            teleportModeButton.Text = "mode: highest rarity"
-            teleportModeButton.TextColor3 = Color3.fromRGB(70, 200, 255)
-            print("Teleport Mode: HIGHEST RARITY")
-        else
-            teleportModeButton.Text = "mode: nearest"
-            teleportModeButton.TextColor3 = Color3.fromRGB(255, 200, 70)
-            print("Teleport Mode: NEAREST")
-        end
     end)
 
     -- ==================== TRIPLE LOOP ====================
@@ -417,10 +422,6 @@ local function createGUI()
 end
 
 -- ==================== TELEPORT FUNCTIONS ====================
-local function getCharacter()
-    return player.Character or player.CharacterAdded:Wait()
-end
-
 local function isPlayerHead(head)
     local model = head.Parent
     if model and model:IsA("Model") then
@@ -527,7 +528,6 @@ RunService.RenderStepped:Connect(function()
 
     local closest = nil
     local closestDist = AUTO_ROTATE_RANGE
-
     local npcsFolder = workspace:FindFirstChild("NPCs")
     if not npcsFolder then return end
 
@@ -664,7 +664,7 @@ end
 
 local function updateSwordESP()
     if not swordDMGEnabled then
-        for plr, billboard in pairs(swordESPObjects) do removeSwordESP(plr) end
+        for plr, _ in pairs(swordESPObjects) do removeSwordESP(plr) end
         return
     end
     local checkedPlayers = {}
@@ -806,7 +806,7 @@ local function updateFortuneAncientParts()
             else removeFortuneAncientPart(sword) end
         end
     end
-    for sword, part in pairs(fortuneAncientParts) do
+    for sword, _ in pairs(fortuneAncientParts) do
         if not checkedSwords[sword] or not sword.Parent then
             removeFortuneAncientPart(sword)
             trackedSwords[sword] = nil
@@ -1032,6 +1032,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         autoEquipEnabled = not autoEquipEnabled
         print("Auto Equip: " .. (autoEquipEnabled and "ENABLED" or "DISABLED"))
     end
+
+    -- M: teleport to base
+    if input.KeyCode == Enum.KeyCode.M then
+        pcall(function()
+            local args = {"Teleport In Base", "Return"}
+            ReplicatedStorage:WaitForChild("Paper"):WaitForChild("Remotes"):WaitForChild("__remotefunction"):InvokeServer(unpack(args))
+        end)
+    end
 end)
 
 -- ==================== INITIALIZATION ====================
@@ -1044,7 +1052,7 @@ fortuneAncientLoop()
 print("Fortune + Ancient + Insight System: Ready (OFF by default)")
 if player.Character then setupHealthMonitor(player.Character) end
 teleportLoop()
-print("NPC Teleport: Loaded. Press F to toggle. Press L to toggle AutoRotate.")
+print("NPC Teleport: Loaded. Press F to toggle. Press L to toggle AutoRotate. Press M to return to base.")
 print("Auto Equip: Press J to toggle")
 print("Low Health Auto-Teleport: ENABLED (50% with players nearby, 25% when alone)")
 threatDetectionLoop()
